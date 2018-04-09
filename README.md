@@ -20,10 +20,28 @@ TBD.
 
 ## Usage ##
 
+### Pull and merge signatures from origin
+
+```
+git signatures pull
+```
+
 ### Sign a tag
 
 ```
 git signatures add v1.0.0
+```
+
+## Push new signatures to origin
+
+```
+git signatures push
+```
+
+## Pull/merge/sign/push against origin as single step
+
+```
+git signatures add --push v1.0.0
 ```
 
 ### Verify signatures
