@@ -1,11 +1,11 @@
-# Git-signatures #
+# Git Signatures #
 
 This repo includes extensions and workflow examples for being able to attach
 an arbitrary number of GPG signatures to a given commit or tag.
 
-Git already supports commit-signing, so these tools are intended to
-compliment that support by allowing a code reviewer and/or release engineer
-attach their signatures as well.
+Git already supports commit signing. Tthese tools are intended to compliment
+that support by allowing a code reviewer and/or release engineer attach
+their signatures as well.
 
 A CI or build system that enforces m-of-n signature verification on git tags
 to be released offers strong protection against tampering of the repository
@@ -64,7 +64,7 @@ These methods were chosen to make this setup easy to reason about and review.
 A manual signing could be performed as:
 
 ```
-  git rev-parse HEAD | gpg --sign -a | base64 -w0 | \
+  git rev-parse HEAD | gpg --sign | base64 -w0 | \
     git notes --ref refs/signatures append --file=-
   git push origin refs/signatures
 ```
