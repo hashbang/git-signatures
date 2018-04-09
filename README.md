@@ -32,13 +32,13 @@ git signatures pull
 git signatures add v1.0.0
 ```
 
-## Push new signatures to origin
+### Push new signatures to origin
 
 ```
 git signatures push
 ```
 
-## Pull/merge/sign/push against origin as single step
+### Pull/merge/sign/push against origin as single step
 
 ```
 git signatures add --push v1.0.0
