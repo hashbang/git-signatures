@@ -1,0 +1,128 @@
+#!/ur/bin/env bash
+
+version() {
+	echo "git signatures v0.1.0"
+}
+
+usage () {
+	topic="${1:-}"
+	case $topic in
+
+		"" ) cat <<-EOF
+		git signatures <command> [<args>]
+
+		Git Signatures is a system for adding and verifying one or more PGP
+		signatures to a given git reference.
+
+		Git Signatures works by appending one of more signatures of a given
+		ref hash to the git notes interface for that ref at 'refs/signatures'.
+
+		In addition to built in commit signing that allows -authors- to sign,
+		Git Signatures allows parties other than the author to issue "approval"
+		signatures to a ref, allowing for decentralized cryptographic proof of
+		code review. This is also useful for automation use cases where CI
+		systems to be able to add a signatures to a repo if a repo if all tests
+		pass successfully.
+
+		In practice Git Signatures allows for tamper evident design and brings
+		strong code attestations to a deployment process.
+
+		Commands
+		--------
+
+		* git signatures pull
+			Pull all signatures for all refs from origin.
+
+		* git signatures show
+			Show signatures for a given ref.
+
+		* git signatures push
+			Push all signatures for all refs to origin.
+
+		* git signatures add
+			Add a signature to a given ref.
+
+		* git signatures verify
+			Verify signatures for a given ref.
+
+		* git signatures version
+			Report the version number.
+		EOF
+		;;
+
+		"pull" ) cat <<-EOF
+		TODO: add details on pull here
+		EOF
+		;;
+
+		"show" ) cat <<-EOF
+		TODO: add details on show here
+		EOF
+		;;
+
+		"push" ) cat <<-EOF
+		TODO: add details on push here
+		EOF
+		;;
+
+
+		"add" ) cat <<-EOF
+		TODO: add details on add here
+		EOF
+		;;
+
+		"verify" ) cat <<-EOF
+		TODO: add details on verify here
+		EOF
+		;;
+
+		"version" ) cat <<-EOF
+		TODO: add details on version here
+		EOF
+		;;
+
+	esac
+}
+
+
+path_check() {
+	for item in "$@"; do
+		if ! command -v "$item" >/dev/null; then
+			printf "%s not found in \$PATH \\n" "$item";
+			return 1;
+		fi
+	done
+	return 0
+}
+
+main () {
+	path_check git base64 xargs gpg || exit 1
+	[ "$#" -lt 1 ] && usage && exit 1
+	local subcommand="$1"; shift
+	case $subcommand in
+		"-h"|"--help") usage; exit 0;;
+		"-v"|"--version") version; exit 0;;
+	esac
+    ! type "$subcommand" > /dev/null && usage && exit 1
+    $subcommand "$@"
+}
+
+pull () {
+	[ "$#" -ge 1 ] && usage pull && exit 1
+	git fetch origin refs/signatures
+	git notes merge -s cat_sort_uniq origin/refs/signatures
+}
+
+show () {
+	git notes --ref refs/signatures show | \
+	  xargs -L1 -I {} sh -c "echo {} | base64 -d | gpg -d"
+}
+
+add () {
+	[ "$#" -ne 1 ] && usage pull && exit 1
+	git rev-parse HEAD | gpg --sign | base64 -w0 | \
+	  git notes --ref refs/signatures append --file=-
+	git push origin refs/signatures
+}
+
+main "$@"
