@@ -1,10 +1,26 @@
 #!/usr/bin/env bash
 
-version() {
-	echo "git signatures v0.1.0"
+set -o pipefail
+
+VERSION="v0.1.0"
+PROGRAM="${0##*/}"
+COMMAND="$1"
+
+main(){
+	path_check git base64 xargs gpg || exit 1
+
+	case $COMMAND in
+		""|"-h"|"--help"|"help") usage;;
+		"-v"|"--version") cmd_version;;
+	esac
+
+	! type "cmd_$COMMAND" > /dev/null && usage
+
+	shift;
+	"cmd_$COMMAND" "$@"
 }
 
-usage () {
+usage() {
 	topic="${1:-}"
 	case $topic in
 
@@ -83,6 +99,32 @@ usage () {
 	esac
 }
 
+error() {
+	code="${1:-}"
+	case $code in
+
+		"" ) cat <<-EOF
+			Unknown error. Good luck!
+		EOF
+		;;
+
+		"invalid_private_key" ) read -r -d '' template  <<-EOF
+			Unable to create signature.
+
+			This is not a valid private key according to GnuPG: "%s"
+
+			Please set a public public key in your git configuration that has a
+			valid local private key you control.
+
+			> gpg --list-secret-keys
+			> git config user.signingKey "YOURKEYID"
+		EOF
+		;;
+	esac
+
+	# shellcheck disable=SC2059
+	printf "${template}\\n" "${@:2}"
+}
 
 path_check() {
 	for item in "$@"; do
@@ -94,34 +136,54 @@ path_check() {
 	return 0
 }
 
-main () {
-	path_check git base64 xargs gpg || exit 1
-	[ "$#" -lt 1 ] && usage && exit 1
-	local subcommand="$1"; shift
-	case $subcommand in
-		"-h"|"--help") usage; exit 0;;
-		"-v"|"--version") version; exit 0;;
-	esac
-    ! type "$subcommand" > /dev/null && usage && exit 1
-    $subcommand "$@"
+cmd_version() {
+	echo "$PROGRAM $VERSION"
 }
 
-pull () {
-	[ "$#" -ge 1 ] && usage pull && exit 1
+cmd_add() {
+	local opts key_id
+	opts="$(getopt -o k: -l key: -n "$PROGRAM" -- "$@")";
+	eval set -- "$opts"
+	while true; do case $1 in
+		-k|--key) key_id="$2"; shift 2 ;;
+		--) shift; break ;;
+	esac done
+	[ "$#" -gt 2 ] && usage add && exit 1
+	ref=${1:-HEAD}
+	key=${key_id:-$(git config user.signingKey)}
+	gpg --list-secret-keys "$key" &> /dev/null || {
+		error "invalid_private_key" "$key"; exit 1;
+	}
+	signature=$( \
+		git rev-parse "$ref" \
+		| gpg --sign --local-user "$key" \
+		| base64 -w0 \
+	)
+	printf "%s" "$signature" | git notes --ref refs/signatures append --file=-
+}
+
+cmd_pull() {
+	# TODO
+	[ "$#" -eq 0 ] || { usage pull; exit 1; }
 	git fetch origin refs/signatures
 	git notes merge -s cat_sort_uniq origin/refs/signatures
 }
 
-show () {
-	git notes --ref refs/signatures show | \
-	  xargs -L1 -I {} sh -c "echo {} | base64 -d | gpg -d"
+cmd_push() {
+	# TODO
+	[ "$#" -eq 0 ] || { usage push; exit 1; }
+	git push origin refs/signatures
 }
 
-add () {
-	[ "$#" -ne 1 ] && usage add && exit 1
-	git rev-parse HEAD | gpg --sign | base64 -w0 | \
-	  git notes --ref refs/signatures append --file=-
-	git push origin refs/signatures
+cmd_verify() {
+	[ "$#" -eq 0 ] || { usage push; exit 1; }
+	# TODO
+}
+
+cmd_show() {
+	# TODO
+	git notes --ref refs/signatures show | \
+	  xargs -L1 -I {} sh -c "echo {} | base64 -d | gpg -d"
 }
 
 main "$@"
