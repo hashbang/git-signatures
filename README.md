@@ -98,8 +98,6 @@ git notes --ref refs/signatures show | \
 
 ## Notes ##
 
-  Everything above is all lies. Consider it documentation-driven-development
-
   Use at your own risk. You may be eaten by a grue.
 
   Questions/Comments?
