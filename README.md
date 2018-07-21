@@ -14,9 +14,20 @@ by a single bad actor or compromised system.
 This approach builds entirely on the git-notes interface which allows the
 attachment of arbitrary data to an existing commit.
 
+## Requirements ##
+
+  * Git 2.1+
+  * GnuPG 2.2+
+
 ## Install ##
 
-TBD.
+You need only place bin/git-signatures anywhere in your $PATH.
+
+By default you can install it to $HOME/.local/bin with:
+
+```
+make install
+```
 
 ## Usage ##
 

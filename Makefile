@@ -1,6 +1,6 @@
 .PHONY: all test
 
-EXECUTABLES = bats git base64 xargs gpg
+EXECUTABLES = bats shellcheck git base64 xargs gpg
 K := $(foreach exec,$(EXECUTABLES),\
         $(if $(shell which $(exec)),some string,$(error "No $(exec) in PATH)))
 
