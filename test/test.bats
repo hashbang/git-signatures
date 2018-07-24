@@ -25,5 +25,10 @@ load test_helper
 
 @test "can show signatures" {
 	run git signatures show HEAD
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 0 ]
+}
+
+@test "can show signatures in raw mode" {
+	run git signatures show --raw HEAD
+	[ "$status" -eq 0 ]
 }
