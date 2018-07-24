@@ -199,8 +199,9 @@ cmd_show() {
 		)
 		local sig_status="unknown"
 		while read -r values; do
-			local array=($values)
-			local key=${array[1]}
+			local key array sig_key sig_date sig_status sig_author
+			IFS=" " read -r -a array <<< "$values"
+			key=${array[1]}
 			case $key in
 				"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
 					sig_key="${array[2]}"
