@@ -22,3 +22,8 @@ load test_helper
 	run git signatures add --key "INVALIDKEY" HEAD
 	[ "$status" -eq 1 ]
 }
+
+@test "can show signatures" {
+	run git signatures show HEAD
+	[ "$status" -eq 1 ]
+}

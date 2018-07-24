@@ -136,6 +136,12 @@ path_check() {
 	return 0
 }
 
+epoch_to_human() {
+	local epoch="$1"
+	# BSD and Linux have never agreed on how date is supposed to work...
+	printf "%s" "$(date -d @"$epoch" || date -r "$epoch" )"
+}
+
 cmd_version() {
 	echo "$PROGRAM $VERSION"
 }
@@ -181,9 +187,47 @@ cmd_verify() {
 }
 
 cmd_show() {
-	# TODO
-	git notes --ref refs/signatures show | \
-	  xargs -L1 -I {} sh -c "echo {} | base64 -d | gpg -d"
+	printf " %-8s | %-16s | %-28s | %-50s \\n" \
+		"Status" "Public Key ID" "Date" "Signer"
+	printf "=%.0s" {1..105}
+	printf "\\n"
+	while IFS='' read -r line; do
+		signature_raw=$( \
+			printf '%s' "$line" \
+			| base64 -d \
+			| gpg -d --status-fd=1 2> /dev/null\
+		)
+		local sig_status="unknown"
+		while read -r values; do
+			local array=($values)
+			local key=${array[1]}
+			case $key in
+				"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
+					sig_key="${array[2]}"
+					sig_date="$(epoch_to_human "${array[6]}")"
+					sig_status="$key"
+				;;
+				"GOODSIG")
+					sig_author="${values:34}"
+					sig_key="${array[2]}"
+				;;
+				"VALIDSIG")
+					sig_status="$key"
+					sig_date="$(epoch_to_human "${array[4]}")"
+				;;
+				"SIG_ID")
+					sig_date="$(epoch_to_human "${array[4]}")"
+				;;
+				"NEWSIG")
+					sig_author="${sig_author:-Unknown User <${array[2]}>}"
+				;;
+
+			esac
+		done <<< "$signature_raw"
+		printf " %-8s | %10s | %10s | %-30s\\n" \
+			"$sig_status" "$sig_key" "$sig_date" "$sig_author"
+		unset sig_key sig_date sig_author
+	done < <(git notes --ref refs/signatures show)
 }
 
 main "$@"
