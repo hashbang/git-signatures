@@ -1,7 +1,7 @@
 before_install:
   - sudo add-apt-repository ppa:duggan/bats --yes
-  - sudo add-apt-repository ppa:aheinecke/gnupg --yes
   - sudo apt-get update -qq
-  - sudo apt-get install -qq bats gnupg shellcheck
+  - sudo apt-get install -qq bats gnupg2 shellcheck
 script:
+  - ln -s /usr/bin/gpg2 /usr/bin/gpg
   - make test
