@@ -1,7 +1,7 @@
 before_install:
   - sudo add-apt-repository ppa:duggan/bats --yes
   - sudo apt-get update -qq
-  - sudo apt-get install -qq bats gnupg2 shellcheck
+  - sudo apt-get install -qq bats git gnupg2 shellcheck
 script:
   - sudo ln -s /usr/bin/gpg /usr/bin/gpg2
   - gpg --version

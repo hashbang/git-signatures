@@ -1,4 +1,5 @@
 setup(){
+	[[ -f "/usr/bin/gpg2" ]] && alias gpg="/usr/bin/gpg2"
 	PATH="$PATH:bin"
 	REPO_REMOTE="$(mktemp -d)"; export REPO_REMOTE
 	REPO_LOCAL="$(mktemp -d)"; export REPO_LOCAL
