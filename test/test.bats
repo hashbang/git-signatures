@@ -12,6 +12,11 @@ load test_helper
 	[ "$status" -eq 0 ]
 }
 
+@test "can add signature and automatically push" {
+	run git signatures add --push
+	[ "$status" -eq 0 ]
+}
+
 @test "can not add signature to current HEAD with invalid key" {
 	git config user.signingKey "INVALIDKEY"
 	run git signatures add HEAD
