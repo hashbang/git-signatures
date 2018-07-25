@@ -218,7 +218,7 @@ cmd_add() {
 		| base64 -w0 \
 	)
 	printf "%s" "$signature" | git notes --ref signatures append --file=-
-	[[ "$push" -eq "1" ]] && $PROGRAM push
+	[[ "$push" -eq "0" ]] || $PROGRAM push
 }
 
 cmd_show() {
