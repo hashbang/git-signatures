@@ -3,5 +3,6 @@ before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -qq bats gnupg2 shellcheck
 script:
-  - ln -s /usr/bin/gpg2 /usr/bin/gpg
+  - sudo ln -s /usr/bin/gpg2 /usr/bin/gpg
+  - gpg --version
   - make test
