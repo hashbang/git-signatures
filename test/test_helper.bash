@@ -6,9 +6,7 @@ setup(){
 	GNUPGHOME="$(mktemp -d)"; export GNUPGHOME
 	gpg-agent \
 		--daemon \
-		--allow-preset-passphrase \
-		--extra-socket "$GNUPGHOME/S.gpg-agent"
-	export GPG_AGENT_INFO=$GNUPGHOME/S.gpg-agent
+		--allow-preset-passphrase
 	gpg --import test/files/keys/*.key
 	gpg --import-ownertrust test/files/keys/keys.trust
 
