@@ -10,8 +10,8 @@ main(){
 	path_check git base64 xargs gpg || exit 1
 
 	case $COMMAND in
-		""|"-h"|"--help"|"help"|"usage") usage;;
-		"-v"|"--version") cmd_version;;
+		""|"-h"|"--help"|"help"|"usage") usage; exit 0;;
+		"-v"|"--version") cmd_version; exit 0;;
 	esac
 
 	! type "cmd_$COMMAND" > /dev/null && usage
@@ -46,23 +46,46 @@ usage() {
 		Commands
 		--------
 
-		* git signatures pull
-			Pull all signatures for all refs from origin.
+		* git signatures init
+		    Setup git to automatically include signatures on push/pull
 
 		* git signatures show
-			Show signatures for a given ref.
-
-		* git signatures push
-			Push all signatures for all refs to origin.
+		    Show signatures for a given ref.
 
 		* git signatures add
-			Add a signature to a given ref.
+		    Add a signature to a given ref.
 
 		* git signatures verify
-			Verify signatures for a given ref.
+		    Verify signatures for a given ref.
+
+		* git signatures pull
+		    Pull all signatures for all refs from origin.
+
+		* git signatures push
+		    Push all signatures for all refs to origin.
 
 		* git signatures version
-			Report the version number.
+		    Report the version number.
+		EOF
+		;;
+
+		"init" ) cat <<-EOF
+		git signatures init
+
+		Configure local git repo to automatically include signatures on fetch
+		and push.
+		EOF
+		;;
+
+		"show" ) cat <<-EOF
+		git signatures show [options] [<ref>]
+
+		Show signatures for a given ref
+
+		Options:
+
+		* --raw -r:
+		  Show raw output from gnupg
 		EOF
 		;;
 
@@ -81,15 +104,24 @@ usage() {
 		EOF
 		;;
 
-		"show" ) cat <<-EOF
-		git signatures show [options] [<ref>]
+		"verify" ) cat <<-EOF
+		git signatures verify [options] [<ref>]
 
-		Show signatures for a given ref
+		Verify git signatures and only return 0 if conditions met.
+
+		Useful for CI or scripting.
 
 		Options:
 
-		* --raw -r:
-		  Show raw output from gnupg
+		* --min-count=<num> -m <num>:
+		  Only return 0 if the specified number of unique valid signatures
+		  exists on the specified ref
+
+		* --trust-db=<name> -t <name>:
+		  Specify a specific GnuPG trustdb to validate signatures against.
+
+		  Useful if you want to verify signatures from isolated sets of
+		  possible keys.
 		EOF
 		;;
 
@@ -104,27 +136,6 @@ usage() {
 		git signatures push [<ref>]
 
 		Push local signatures for a given ref to origin
-		EOF
-		;;
-
-		"verify" ) cat <<-EOF
-		git signatures verify [options] [<ref>]
-
-		Verify git signatures and only return 0 if conditions met.
-
-		Useful for CI or scripting.
-
-		Options:
-
-		* --min-count=<num> -m <num>:
-		  Only return 0 if the specified number of valid signatures exist on
-		  the specified ref
-
-		* --trust-db=<name> -t <name>:
-		  Specify a specific GnuPG trustdb to validate signatures against.
-
-		  Useful if you want to verify signatures from isolated sets of
-		  possible keys.
 		EOF
 		;;
 
@@ -177,7 +188,7 @@ path_check() {
 
 epoch_to_human() {
 	local epoch="$1"
-	# BSD and Linux have never agreed on how date is supposed to work...
+	# BSD and Linux have never agreed on how date is supposed to work.
 	printf "%s" "$(date -d @"$epoch" || date -r "$epoch" )"
 }
 
@@ -187,7 +198,7 @@ cmd_version() {
 
 cmd_add() {
 	local opts key_id push=0
-	opts="$(getopt -o hk: -l help,key: -n "$PROGRAM" -- "$@")";
+	opts="$(getopt -o hpk: -l help,push,key: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
 		-h|--help) usage add; exit 0;;
@@ -206,7 +217,7 @@ cmd_add() {
 		| gpg --sign --local-user "$key" \
 		| base64 -w0 \
 	)
-	printf "%s" "$signature" | git notes --ref refs/signatures append --file=-
+	printf "%s" "$signature" | git notes --ref signatures append --file=-
 	[[ "$push" -eq "1" ]] && $PROGRAM push
 }
 
@@ -265,25 +276,46 @@ cmd_show() {
 		printf " %-8s | %10s | %10s | %-30s\\n" \
 			"$sig_status" "$sig_key" "$sig_date" "$sig_author"
 		unset sig_key sig_date sig_author
-	done < <(git notes --ref refs/signatures show "$ref")
-}
-
-cmd_pull() {
-	# TODO
-	[ "$#" -eq 0 ] || { usage pull; exit 1; }
-	git fetch origin refs/signatures
-	git notes merge -s cat_sort_uniq origin/refs/signatures
-}
-
-cmd_push() {
-	# TODO
-	[ "$#" -eq 0 ] || { usage push; exit 1; }
-	git push origin refs/signatures
+	done < <(git notes --ref signatures show "$ref")
 }
 
 cmd_verify() {
-	[ "$#" -eq 0 ] || { usage verify; exit 1; }
+	local opts min_count trust_db
+	opts="$(getopt -o hm:t: -l help,min-count:,trust-db: -n "$PROGRAM" -- "$@")";
+	eval set -- "$opts"
+	while true; do case $1 in
+		-h|--help) usage verify; exit 0;;
+		-m|--min-count) min_count="$2"; shift 2 ;;
+		-t|--trust-db) trust_db="$2"; shift 2;;
+		--) shift; break ;;
+	esac done
+	[ "$#" -gt 1 ] && usage verify && exit 1
+	ref=${1:-HEAD}
+
 	# TODO
+	echo "$min_count"
+	echo "$trust_db"
+}
+
+cmd_init() {
+	[ "$#" -eq 0 ] || { usage init; exit 1; }
+	git config --add \
+		remote.origin.fetch \
+		"+refs/notes/signatures:refs/notes/signatures"
+	git config --add \
+		remote.origin.push \
+		"+refs/notes/signatures:refs/notes/signatures"
+}
+
+cmd_pull() {
+	[ "$#" -eq 0 ] || { usage pull; exit 1; }
+	git fetch origin refs/notes/signatures:refs/notes/origin/signatures
+	git notes --ref signatures merge -s cat_sort_uniq origin/signatures
+}
+
+cmd_push() {
+	[ "$#" -eq 0 ] || { usage push; exit 1; }
+	git push origin refs/notes/signatures
 }
 
 main "$@"
