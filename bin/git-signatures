@@ -170,6 +170,19 @@ error() {
 			> git config user.signingKey "YOURKEYID"
 		EOF
 		;;
+
+		"verify_failed" ) read -r -d '' template  <<-EOF
+			Failed to find enough verifed signatures to satisfy: min_count=%s
+
+			Signature verification could fail simply because your local gnupg
+			keychain and trustdb does not contain the required keys.
+
+			For detailed signature status run:
+
+			> git signatures show
+		EOF
+		;;
+
 	esac
 
 	# shellcheck disable=SC2059
@@ -190,6 +203,57 @@ epoch_to_human() {
 	local epoch="$1"
 	# BSD and Linux have never agreed on how date is supposed to work.
 	printf "%s" "$(date -d @"$epoch" || date -r "$epoch" )"
+}
+
+sig_parse(){
+	local sig_raw="$1"
+	local sig_status="unknown"
+	while read -r values; do
+		local key array sig_key sig_date sig_status sig_author
+		IFS=" " read -r -a array <<< "$values"
+		key=${array[1]}
+		case $key in
+			"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
+				sig_key="${array[2]}"
+				sig_date="$(epoch_to_human "${array[6]}")"
+				sig_status="$key"
+			;;
+			"GOODSIG")
+				sig_author="${values:34}"
+				sig_key="${array[2]}"
+			;;
+			"VALIDSIG")
+				sig_status="$key"
+				sig_date="$(epoch_to_human "${array[4]}")"
+			;;
+			"SIG_ID")
+				sig_date="$(epoch_to_human "${array[4]}")"
+			;;
+			"NEWSIG")
+				sig_author="${sig_author:-Unknown User <${array[2]}>}"
+			;;
+			TRUST_*)
+				sig_trust="${key//TRUST_/}"
+			;;
+		esac
+	done <<< "$sig_raw"
+	echo -n "$sig_key|$sig_status|$sig_trust|$sig_date|$sig_author"
+}
+
+sig_decode() {
+	local sig="$1"
+		printf '%s' "$sig" \
+		| base64 -d \
+		| gpg -d --trustdb-name="$trust_db" --status-fd=1 2> /dev/null
+}
+
+get_sigs() {
+	local ref="$1"
+	while IFS='' read -r line; do
+		# shellcheck disable=SC2005
+		# TODO: Figure out some other way to do this
+		echo "$(sig_parse "$(sig_decode "$line")")"
+	done < <(git notes --ref signatures show "$ref" | grep -v "^$")
 }
 
 cmd_version() {
@@ -222,65 +286,33 @@ cmd_add() {
 }
 
 cmd_show() {
-	local opts raw=0
-	opts="$(getopt -o hr -l help,raw -n "$PROGRAM" -- "$@")";
+	local opts raw=0 trust_db="trustdb.gpg"
+	opts="$(getopt -o hrt: -l help,raw,trust-db: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
 		-h|--help) usage show; exit 0;;
 		-r|--raw) raw=1; shift ;;
+		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
 	[ "$#" -gt 1 ] && usage show && exit 1
 	ref=${1:-HEAD}
 	if [ "$raw" -ne 1 ]; then
-		printf " %-8s | %-16s | %-28s | %-50s \\n" \
-			"Status" "Public Key ID" "Date" "Signer"
-		printf "=%.0s" {1..105}
+		printf " %-16s | %-10s | %-9s | %-28s | %-50s \\n" \
+			"Public Key ID" "Status" "Trust" "Date" "Signer Name"
+		printf "=%.0s" {1..119}
 		printf "\\n"
 	fi
-	while IFS='' read -r line; do
-		signature_raw=$( \
-			printf '%s' "$line" \
-			| base64 -d \
-			| gpg -d --status-fd=1 2> /dev/null\
-		)
-		[ "$raw" -eq "1" ] && echo "$signature_raw" && continue
-		local sig_status="unknown"
-		while read -r values; do
-			local key array sig_key sig_date sig_status sig_author
-			IFS=" " read -r -a array <<< "$values"
-			key=${array[1]}
-			case $key in
-				"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
-					sig_key="${array[2]}"
-					sig_date="$(epoch_to_human "${array[6]}")"
-					sig_status="$key"
-				;;
-				"GOODSIG")
-					sig_author="${values:34}"
-					sig_key="${array[2]}"
-				;;
-				"VALIDSIG")
-					sig_status="$key"
-					sig_date="$(epoch_to_human "${array[4]}")"
-				;;
-				"SIG_ID")
-					sig_date="$(epoch_to_human "${array[4]}")"
-				;;
-				"NEWSIG")
-					sig_author="${sig_author:-Unknown User <${array[2]}>}"
-				;;
-
-			esac
-		done <<< "$signature_raw"
-		printf " %-8s | %10s | %10s | %-30s\\n" \
-			"$sig_status" "$sig_key" "$sig_date" "$sig_author"
-		unset sig_key sig_date sig_author
-	done < <(git notes --ref signatures show "$ref")
+	while IFS='' read -r sig_parsed; do
+		[ "$raw" -eq "1" ] && echo "$sig_parsed" && continue
+		IFS="|" read -d '' -ra sig < <(echo -n "$sig_parsed")
+		printf " %-16s | %-10s | %-9s | %28s | %-50s\\n" \
+			"${sig[0]}" "${sig[1]}" "${sig[2]}" "${sig[3]}" "${sig[4]}"
+	done < <(get_sigs "$ref")
 }
 
 cmd_verify() {
-	local opts min_count trust_db
+	local opts min_count=1 trust_db="trustdb.gpg"
 	opts="$(getopt -o hm:t: -l help,min-count:,trust-db: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
@@ -291,10 +323,16 @@ cmd_verify() {
 	esac done
 	[ "$#" -gt 1 ] && usage verify && exit 1
 	ref=${1:-HEAD}
+	valid_count=$( \
+		cmd_show --raw --trust-db="$trust_db" "$ref" \
+		| grep "VALIDSIG" \
+		| awk '{ print $3 }' \
+		| uniq \
+		| wc -l \
+	)
 
-	# TODO
-	echo "$min_count"
-	echo "$trust_db"
+	[[ "$valid_count" -ge "$min_count" ]] || \
+		{ error "verify_failed" "$min_count"; exit 1; }
 }
 
 cmd_init() {
