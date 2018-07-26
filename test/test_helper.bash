@@ -6,7 +6,9 @@ setup(){
 	GNUPGHOME="$(mktemp -d)"; export GNUPGHOME
 	gpg-agent \
 		--daemon \
-		--allow-preset-passphrase
+		--allow-preset-passphrase &
+	export GPG_AGENT_PID="$!"
+	echo "GPG_AGENT_PID=$GPG_AGENT_PID"
 	gpg --import test/files/keys/*.key
 	gpg --import-ownertrust test/files/keys/keys.trust
 
@@ -28,4 +30,5 @@ setup(){
 
 teardown(){
 	rm -rf "$REPO_REMOTE" "$REPO_LOCAL" "$GNUPGHOME"
+	kill -9 "$GPG_AGENT_PID" || true
 }
