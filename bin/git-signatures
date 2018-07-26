@@ -325,8 +325,8 @@ cmd_verify() {
 	ref=${1:-HEAD}
 	valid_count=$( \
 		cmd_show --raw --trust-db="$trust_db" "$ref" \
-		| grep "VALIDSIG" \
-		| awk '{ print $3 }' \
+		| grep "ULTIMATE" \
+		| awk -F"|" '{ print $3 }' \
 		| uniq \
 		| wc -l \
 	)
