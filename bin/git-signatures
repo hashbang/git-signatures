@@ -7,7 +7,7 @@ PROGRAM="${0##*/}"
 COMMAND="$1"
 
 main(){
-	path_check git base64 xargs gpg || exit 1
+	path_check git openssl xargs gpg || exit 1
 
 	case $COMMAND in
 		""|"-h"|"--help"|"help"|"usage") usage; exit 0;;
@@ -243,7 +243,7 @@ sig_parse(){
 sig_decode() {
 	local sig="$1"
 		printf '%s' "$sig" \
-		| base64 -d \
+		| openssl base64 -d -A \
 		| gpg -d --trustdb-name="$trust_db" --status-fd=1 2> /dev/null
 }
 
@@ -279,7 +279,7 @@ cmd_add() {
 	signature=$( \
 		git rev-parse "$ref" \
 		| gpg --sign --local-user "$key" \
-		| base64 -w0 \
+		| openssl base64 \
 	)
 	printf "%s" "$signature" | git notes --ref signatures append --file=-
 	[[ "$push" -eq "0" ]] || $PROGRAM push
