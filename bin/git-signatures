@@ -49,6 +49,10 @@ usage() {
 		* git signatures init
 		    Setup git to automatically include signatures on push/pull
 
+		* git signatures import
+		    Import all PGP keys specified in .gitsigners file to local
+		    GnuPG keychain allowing for verifications.
+
 		* git signatures show
 		    Show signatures for a given ref.
 
@@ -74,6 +78,14 @@ usage() {
 
 		Configure local git repo to automatically include signatures on fetch
 		and push.
+		EOF
+		;;
+
+		"import" ) cat <<-EOF
+		git signatures import
+
+		Import all PGP keys specified in .gitsigners file to local GnuPG
+		keychain allowing for verifications.
 		EOF
 		;;
 
@@ -343,6 +355,21 @@ cmd_init() {
 	git config --add \
 		remote.origin.push \
 		"+refs/notes/signatures:refs/notes/signatures"
+}
+
+cmd_import() {
+	[ "$#" -eq 0 ] || { usage import; exit 1; }
+	for server in $(shuf -e ha.pool.sks-keyservers.net \
+	                        hkp://p80.pool.sks-keyservers.net:80 \
+	                        keyserver.ubuntu.com \
+	                        hkp://keyserver.ubuntu.com:80 \
+	                        pgp.mit.edu ) ;
+	do
+		# shellcheck disable=SC2046
+	  	gpg \
+	  		--keyserver "$server" \
+	  		--recv-keys $(xargs echo < .gitsigners) && { break || : ; }
+	done
 }
 
 cmd_pull() {
