@@ -6,4 +6,4 @@ script:
   - make test
   - make install
   - git signatures import
-  - git signatures verify --min-count=2
+  - git signatures verify --min-count=1
