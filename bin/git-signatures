@@ -291,7 +291,7 @@ cmd_add() {
 	signature=$( \
 		git rev-parse "$ref" \
 		| gpg --sign --local-user "$key" \
-		| openssl base64 \
+		| openssl base64 -A \
 	)
 	printf "%s" "$signature" | git notes --ref signatures append --file=-
 	[[ "$push" -eq "0" ]] || $PROGRAM push
