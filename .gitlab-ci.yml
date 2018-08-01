@@ -3,6 +3,7 @@ stages:
   - test
 
 lint:
+  stage: lint
   image: debian
   before_script:
     - apt-get update -qq
