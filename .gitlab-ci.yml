@@ -1,8 +1,20 @@
+stages:
+  - lint
+  - test
+
+lint:
+  image: debian
+  before_script:
+    - apt-get update -qq
+    - apt-get install -qq shellcheck make
+  script:
+    - make lint
+
 test:
   image: debian
   before_script:
     - apt-get update -qq
-    - apt-get install -qq make bats git gnupg2 shellcheck
+    - apt-get install -qq make bats git gnupg2
   script:
     - make test
     - make install
