@@ -369,7 +369,7 @@ cmd_import() {
 	  		--keyserver "$server" \
 	  		--recv-keys $(xargs echo < .gitsigners) && { break || : ; }
 	done
-	{ sed 's/$/:6:/g' | gpg --import-ownertrust; } < .gitsigners
+	sed 's/$/:6:/g' < .gitsigners | gpg --import-ownertrust
 }
 
 cmd_pull() {
