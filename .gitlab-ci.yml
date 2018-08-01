@@ -17,7 +17,7 @@ test:
     - apt-get install -qq make bats git gnupg2
   script:
     - make test
-    - make install
+    - make install prefix=/usr/local
     - git branch
     - git signatures pull
     - git signatures import
