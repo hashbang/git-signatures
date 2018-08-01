@@ -9,4 +9,4 @@ script:
   - git signatures pull
   - git signatures import
   - git signatures show
-  - git signatures verify --min-count=1
+  - git signatures verify --min-count=2
