@@ -1,8 +1,8 @@
-.PHONY: all test
-
 SHELL=/bin/bash
 prefix=$$HOME/.local
 bindir=$(prefix)/bin
+
+all: test
 
 test:
 	bats test/test.bats
@@ -14,4 +14,4 @@ install:
 	mkdir -p $(bindir)
 	install bin/git-signatures $(bindir)
 
-all: test
+.PHONY: all test
