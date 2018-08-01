@@ -338,11 +338,10 @@ cmd_verify() {
 	valid_count=$( \
 		cmd_show --raw --trust-db="$trust_db" "$ref" \
 		| grep "ULTIMATE" \
-		| awk -F"|" '{ print $3 }' \
+		| awk -F"|" '{ print $1 }' \
 		| uniq \
 		| wc -l \
 	)
-
 	[[ "$valid_count" -ge "$min_count" ]] || \
 		{ error "verify_failed" "$min_count"; exit 1; }
 }

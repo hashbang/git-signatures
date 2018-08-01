@@ -37,3 +37,17 @@ load test_helper
 	run git signatures show --raw HEAD
 	[ "$status" -eq 0 ]
 }
+
+@test "can not verify if number of valid sigs below min-count" {
+	git signatures add --push
+	run git signatures verify --min-count=2
+	[ "$status" -eq 1 ]
+}
+
+@test "can verify if number of valid sigs meets min-count" {
+	run git signatures add --key "approver1@company.com" HEAD
+	run git signatures add --key "approver2@company.com" HEAD
+	git signatures show >&2
+	run git signatures verify --min-count=2
+	[ "$status" -eq 0 ]
+}
