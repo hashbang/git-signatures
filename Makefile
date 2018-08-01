@@ -14,6 +14,6 @@ lint:
 
 install:
 	mkdir -p $$HOME/.local/bin
-	cp bin/git-signatures $$HOME/.local/bin/
+	install bin/git-signatures $$HOME/.local/bin/
 
 all: test
