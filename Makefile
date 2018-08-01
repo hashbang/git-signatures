@@ -6,7 +6,7 @@ K := $(foreach exec,$(EXECUTABLES),\
 
 SHELL=/bin/bash
 
-test: lint
+test:
 	bats test/test.bats
 
 lint:

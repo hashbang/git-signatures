@@ -3,6 +3,7 @@ before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -qq bats git gnupg2 shellcheck
 script:
+  - make lint
   - make test
   - make install
   - git branch
