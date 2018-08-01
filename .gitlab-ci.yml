@@ -1,6 +1,7 @@
 stages:
   - lint
   - test
+  - signature-check
 
 lint:
   stage: lint
@@ -18,6 +19,14 @@ test:
     - apt-get install -qq make bats git gnupg2
   script:
     - make test
+
+signature-check:
+  stage: signature-check
+  image: debian
+  before_script:
+    - apt-get update -qq
+    - apt-get install -qq make git gnupg2
+  script:
     - make install prefix=/usr/local
     - git branch
     - git signatures pull
