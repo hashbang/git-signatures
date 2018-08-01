@@ -27,7 +27,10 @@ signature-check:
     - apt-get update -qq
     - apt-get install -qq make git gnupg2
   script:
+    - git remote add origin https://github.com/hashbang/git-signatures.git
+    - git pull origin $CI_COMMIT_REF_NAME
     - make install prefix=/usr/local
+    - git remote rm origin
     - git branch
     - git signatures pull
     - git signatures import
