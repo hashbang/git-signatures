@@ -14,4 +14,4 @@ install:
 	mkdir -p $(bindir)
 	install bin/git-signatures $(bindir)
 
-.PHONY: all test
+.PHONY: all test lint install
