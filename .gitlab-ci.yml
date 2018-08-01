@@ -1,0 +1,13 @@
+test:
+  image: debian
+  before_script:
+    - apt-get update -qq
+    - apt-get install -qq make bats git gnupg2 shellcheck
+  script:
+    - make test
+    - make install
+    - git branch
+    - git signatures pull
+    - git signatures import
+    - git signatures show
+    - git signatures verify --min-count=2
