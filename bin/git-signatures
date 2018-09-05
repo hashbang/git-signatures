@@ -215,14 +215,6 @@ path_check() {
 	return 0
 }
 
-sig_subject() {
-	local base="${1:-master}"
-
-	git diff-tree -p "$(git merge-base "$base" HEAD)"..HEAD \
-	| git patch-id --stable \
-	| cut -d\  -f1
-}
-
 sig_parse(){
 	local sig_raw="$1"
 	local sig_status="unknown"
