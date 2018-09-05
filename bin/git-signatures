@@ -6,9 +6,9 @@ VERSION="v0.1.0"
 PROGRAM="${0##*/}"
 COMMAND="$1"
 
-GETOPT=$(command -v gnu-getopt) || "getopt"
-DATE=$(command -v gdate) || "date"
-SHUF=$(command -v gshuf) || "shuf"
+GETOPT=$(command -v gnu-getopt || command -v getopt)
+DATE=$(command -v gdate || command -v date)
+SHUF=$(command -v gshuf || command -v shuf)
 
 main(){
 	path_check git openssl xargs gpg || exit 1
