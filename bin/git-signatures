@@ -215,10 +215,12 @@ path_check() {
 	return 0
 }
 
-epoch_to_human() {
-	local epoch="$1"
-	# BSD and Linux have never agreed on how date is supposed to work.
-	printf "%s" "$($DATE -d @"$epoch" || $DATE -r "$epoch" )"
+sig_subject() {
+	local base="${1:-master}"
+
+	git diff-tree -p "$(git merge-base "$base" HEAD)"..HEAD \
+	| git patch-id --stable \
+	| cut -d\  -f1
 }
 
 sig_parse(){
@@ -231,7 +233,7 @@ sig_parse(){
 		case $key in
 			"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
 				sig_key="${array[2]}"
-				sig_date="$(epoch_to_human "${array[6]}")"
+				sig_date="$($DATE -d @"${array[6]}")"
 				sig_status="$key"
 			;;
 			"GOODSIG")
@@ -240,10 +242,10 @@ sig_parse(){
 			;;
 			"VALIDSIG")
 				sig_status="$key"
-				sig_date="$(epoch_to_human "${array[4]}")"
+				sig_date="$($DATE -d @"${array[4]}")"
 			;;
 			"SIG_ID")
-				sig_date="$(epoch_to_human "${array[4]}")"
+				sig_date="$($DATE -d @"${array[4]}")"
 			;;
 			"NEWSIG")
 				sig_author="${sig_author:-Unknown User <${array[2]}>}"
