@@ -19,7 +19,7 @@ attachment of arbitrary data to an existing commit.
   * Git 2.1+
   * GnuPG 2.2+
 
-## Mac OS X ##
+### Mac OS X ###
 
 Since the built in getopt and date binaries are not compatible with this script, you must install some GNU compatible binaries (homebrew recommended).
 
