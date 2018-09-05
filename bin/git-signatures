@@ -10,6 +10,8 @@ GETOPT=$(command -v gnu-getopt || command -v getopt)
 DATE=$(command -v gdate || command -v date)
 SHUF=$(command -v gshuf || command -v shuf)
 
+SIGNATURE_TAG="latest-signature"
+
 main(){
 	path_check git openssl xargs gpg || exit 1
 
@@ -215,6 +217,14 @@ path_check() {
 	return 0
 }
 
+sig_subject() {
+	local base="${1:-master}"
+
+	git diff-tree -p "$(git merge-base "$base" HEAD)"..HEAD \
+	| git patch-id --stable \
+	| cut -d\  -f1
+}
+
 sig_parse(){
 	local sig_raw="$1"
 	local sig_status="unknown"
@@ -225,7 +235,6 @@ sig_parse(){
 		case $key in
 			"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
 				sig_key="${array[2]}"
-				sig_date="$($DATE -d @"${array[6]}")"
 				sig_status="$key"
 			;;
 			"GOODSIG")
@@ -252,17 +261,19 @@ sig_parse(){
 
 sig_decode() {
 	local sig="$1"
-		printf '%s' "$sig" \
-		| openssl base64 -d -A \
-		| gpg -d --trustdb-name="$trust_db" --status-fd=1 2> /dev/null
+	local base="$2"
+	gpg --verify --trustdb-name="$trust_db" --status-fd=1 \
+	<(printf '%s' "$sig" | openssl base64 -d -A) \
+	<(sig_subject "$base") 2>/dev/null
 }
 
 get_sigs() {
 	local ref="$1"
+	local base="$2"
 	while IFS='' read -r line; do
 		# shellcheck disable=SC2005
 		# TODO: Figure out some other way to do this
-		echo "$(sig_parse "$(sig_decode "$line")")"
+		echo "$(sig_parse "$(sig_decode "$line" "$base")")"
 	done < <(git notes --ref signatures show "$ref" | grep -v "^$")
 }
 
@@ -281,17 +292,24 @@ cmd_add() {
 		--) shift; break ;;
 	esac done
 	[ "$#" -gt 2 ] && usage add && exit 1
+
 	ref=${1:-HEAD}
+	base=${2:-master}
 	key=${key_id:-$(git config user.signingKey)}
 	gpg --list-secret-keys "$key" &> /dev/null || {
 		error "invalid_private_key" "$key"; exit 1;
 	}
-	signature=$( \
-		git rev-parse "$ref" \
-		| gpg --sign --local-user "$key" \
-		| openssl base64 -A \
-	)
-	printf "%s" "$signature" | git notes --ref signatures append --file=-
+
+	# check for HEAD equal to base
+	[ "$(git rev-parse "$base")" == "$(git rev-parse HEAD)" ] && echo "error: cannot sign empty diff" && exit 1
+
+	sig_subject "$base" \
+	| gpg --detach-sign --local-user "$key" \
+	| openssl base64 -A \
+	| git notes --ref signatures append --file=-
+
+	git tag -f "$SIGNATURE_TAG" "$(git rev-parse refs/notes/signatures)"
+
 	[[ "$push" -eq "0" ]] || $PROGRAM push
 }
 
@@ -305,8 +323,9 @@ cmd_show() {
 		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 1 ] && usage show && exit 1
+	[ "$#" -gt 2 ] && usage show && exit 1
 	ref=${1:-HEAD}
+	base=${2:-HEAD^}
 	if [ "$raw" -ne 1 ]; then
 		printf " %-16s | %-10s | %-9s | %-28s | %-50s \\n" \
 			"Public Key ID" "Status" "Trust" "Date" "Signer Name"
@@ -318,7 +337,7 @@ cmd_show() {
 		IFS="|" read -d '' -ra sig < <(echo -n "$sig_parsed")
 		printf " %-16s | %-10s | %-9s | %28s | %-50s\\n" \
 			"${sig[0]}" "${sig[1]}" "${sig[2]}" "${sig[3]}" "${sig[4]}"
-	done < <(get_sigs "$ref")
+	done < <(get_sigs "$ref" "$base")
 }
 
 cmd_verify() {
@@ -331,10 +350,11 @@ cmd_verify() {
 		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 1 ] && usage verify && exit 1
+	[ "$#" -gt 2 ] && usage verify && exit 1
 	ref=${1:-HEAD}
+	base=${2:-HEAD^}
 	valid_count=$( \
-		cmd_show --raw --trust-db="$trust_db" "$ref" \
+		cmd_show --raw --trust-db="$trust_db" "$ref" "$base" \
 		| grep "ULTIMATE" \
 		| awk -F"|" '{ print $1 }' \
 		| uniq \
@@ -350,8 +370,17 @@ cmd_init() {
 		remote.origin.fetch \
 		"+refs/notes/signatures:refs/notes/signatures"
 	git config --add \
+		remote.origin.fetch \
+		"+refs/tags/$SIGNATURE_TAG:refs/tags/$SIGNATURE_TAG"
+	git config --add \
 		remote.origin.push \
 		"+refs/notes/signatures:refs/notes/signatures"
+	git config --add \
+		remote.origin.push \
+		"+refs/tags/$SIGNATURE_TAG:refs/tags/$SIGNATURE_TAG"
+	git config --add \
+		notes.rewriteRef \
+		"refs/notes/signatures"
 }
 
 cmd_import() {
@@ -372,13 +401,13 @@ cmd_import() {
 
 cmd_pull() {
 	[ "$#" -eq 0 ] || { usage pull; exit 1; }
-	git fetch origin refs/notes/signatures:refs/notes/origin/signatures
+	git fetch origin refs/notes/signatures:refs/notes/origin/signatures "+refs/tags/$SIGNATURE_TAG:refs/tags/origin/$SIGNATURE_TAG"
 	git notes --ref signatures merge -s cat_sort_uniq origin/signatures
 }
 
 cmd_push() {
 	[ "$#" -eq 0 ] || { usage push; exit 1; }
-	git push origin refs/notes/signatures
+	git push origin refs/notes/signatures "+refs/tags/$SIGNATURE_TAG"
 }
 
 main "$@"
