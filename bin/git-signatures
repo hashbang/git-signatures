@@ -6,6 +6,10 @@ VERSION="v0.1.0"
 PROGRAM="${0##*/}"
 COMMAND="$1"
 
+GETOPT=$(command -v gnu-getopt) || "getopt"
+DATE=$(command -v gdate) || "date"
+SHUF=$(command -v gshuf) || "shuf"
+
 main(){
 	path_check git openssl xargs gpg || exit 1
 
@@ -214,7 +218,7 @@ path_check() {
 epoch_to_human() {
 	local epoch="$1"
 	# BSD and Linux have never agreed on how date is supposed to work.
-	printf "%s" "$(date -d @"$epoch" || date -r "$epoch" )"
+	printf "%s" "$($DATE -d @"$epoch" || $DATE -r "$epoch" )"
 }
 
 sig_parse(){
@@ -274,7 +278,7 @@ cmd_version() {
 
 cmd_add() {
 	local opts key_id push=0
-	opts="$(getopt -o hpk: -l help,push,key: -n "$PROGRAM" -- "$@")";
+	opts="$($GETOPT -o hpk: -l help,push,key: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
 		-h|--help) usage add; exit 0;;
@@ -299,7 +303,7 @@ cmd_add() {
 
 cmd_show() {
 	local opts raw=0 trust_db="trustdb.gpg"
-	opts="$(getopt -o hrt: -l help,raw,trust-db: -n "$PROGRAM" -- "$@")";
+	opts="$($GETOPT -o hrt: -l help,raw,trust-db: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
 		-h|--help) usage show; exit 0;;
@@ -325,7 +329,7 @@ cmd_show() {
 
 cmd_verify() {
 	local opts min_count=1 trust_db="trustdb.gpg"
-	opts="$(getopt -o hm:t: -l help,min-count:,trust-db: -n "$PROGRAM" -- "$@")";
+	opts="$($GETOPT -o hm:t: -l help,min-count:,trust-db: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
 		-h|--help) usage verify; exit 0;;
@@ -358,16 +362,16 @@ cmd_init() {
 
 cmd_import() {
 	[ "$#" -eq 0 ] || { usage import; exit 1; }
-	for server in $(shuf -e ha.pool.sks-keyservers.net \
+	for server in $($SHUF -e ha.pool.sks-keyservers.net \
 	                        hkp://p80.pool.sks-keyservers.net:80 \
 	                        keyserver.ubuntu.com \
 	                        hkp://keyserver.ubuntu.com:80 \
 	                        pgp.mit.edu ) ;
 	do
 		# shellcheck disable=SC2046
-	  	gpg \
-	  		--keyserver "$server" \
-	  		--recv-keys $(xargs echo < .gitsigners) && { break || : ; }
+		gpg \
+			--keyserver "$server" \
+			--recv-keys $(xargs echo < .gitsigners) && { break || : ; }
 	done
 	sed 's/$/:6:/g' < .gitsigners | gpg --import-ownertrust
 }

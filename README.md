@@ -19,6 +19,18 @@ attachment of arbitrary data to an existing commit.
   * Git 2.1+
   * GnuPG 2.2+
 
+## Mac OS X ##
+
+Since the built in getopt and date binaries are not compatible with this script, you must install some GNU compatible binaries (homebrew recommended).
+
+  * gnu-getopt
+    * `brew install gnu-getopt`
+    * `ln -s $(brew --prefix gnu-getopt)/bin/getopt /usr/local/bin/gnu-getopt`
+  * coreutils
+    * `brew install coreutils`
+
+Make sure that the `gnu-getopt`, `gdate`, and `gshuf` binaries are in your $PATH.
+
 ## Install ##
 
 You need only place bin/git-signatures anywhere in your $PATH.
