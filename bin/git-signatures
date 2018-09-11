@@ -217,10 +217,20 @@ path_check() {
 	return 0
 }
 
-sig_subject() {
-	local base="${1:-master}"
+default_base() {
+	# are we signing the genesis commit?
+	git rev-parse HEAD^ 1>/dev/null 2>&1
+	if [ "$?" -eq 128 ]; then
+		echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+	else
+		echo "HEAD^"
+	fi
+}
 
-	git diff-tree -p "$(git merge-base "$base" HEAD)"..HEAD \
+sig_subject() {
+	local base="${1:-$(git merge-base master HEAD)}"
+
+	git diff-tree -p "$base"..HEAD \
 	| git patch-id --stable \
 	| cut -d\  -f1
 }
@@ -294,7 +304,7 @@ cmd_add() {
 	[ "$#" -gt 2 ] && usage add && exit 1
 
 	ref=${1:-HEAD}
-	base=${2:-master}
+	base=${2:-$(default_base)}
 	key=${key_id:-$(git config user.signingKey)}
 	gpg --list-secret-keys "$key" &> /dev/null || {
 		error "invalid_private_key" "$key"; exit 1;
@@ -325,7 +335,7 @@ cmd_show() {
 	esac done
 	[ "$#" -gt 2 ] && usage show && exit 1
 	ref=${1:-HEAD}
-	base=${2:-HEAD^}
+	base=${2:-$(default_base)}
 	if [ "$raw" -ne 1 ]; then
 		printf " %-16s | %-10s | %-9s | %-28s | %-50s \\n" \
 			"Public Key ID" "Status" "Trust" "Date" "Signer Name"
@@ -352,7 +362,7 @@ cmd_verify() {
 	esac done
 	[ "$#" -gt 2 ] && usage verify && exit 1
 	ref=${1:-HEAD}
-	base=${2:-HEAD^}
+	base=${2:-$(default_base)}
 	valid_count=$( \
 		cmd_show --raw --trust-db="$trust_db" "$ref" "$base" \
 		| grep "ULTIMATE" \
