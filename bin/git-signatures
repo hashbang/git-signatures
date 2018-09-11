@@ -411,8 +411,9 @@ cmd_import() {
 
 cmd_pull() {
 	[ "$#" -eq 0 ] || { usage pull; exit 1; }
-	git fetch origin refs/notes/signatures:refs/notes/origin/signatures "+refs/tags/$SIGNATURE_TAG:refs/tags/origin/$SIGNATURE_TAG"
+	git fetch origin refs/notes/signatures:refs/notes/origin/signatures
 	git notes --ref signatures merge -s cat_sort_uniq origin/signatures
+    git fetch origin "+refs/tags/$SIGNATURE_TAG:refs/tags/origin/$SIGNATURE_TAG" || true
 }
 
 cmd_push() {
