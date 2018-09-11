@@ -396,10 +396,10 @@ cmd_init() {
 cmd_import() {
 	[ "$#" -eq 0 ] || { usage import; exit 1; }
 	for server in $($SHUF -e ha.pool.sks-keyservers.net \
-	                        hkp://p80.pool.sks-keyservers.net:80 \
-	                        keyserver.ubuntu.com \
-	                        hkp://keyserver.ubuntu.com:80 \
-	                        pgp.mit.edu ) ;
+		hkp://p80.pool.sks-keyservers.net:80 \
+		keyserver.ubuntu.com \
+		hkp://keyserver.ubuntu.com:80 \
+		pgp.mit.edu ) ;
 	do
 		# shellcheck disable=SC2046
 		gpg \
@@ -413,7 +413,7 @@ cmd_pull() {
 	[ "$#" -eq 0 ] || { usage pull; exit 1; }
 	git fetch origin refs/notes/signatures:refs/notes/origin/signatures
 	git notes --ref signatures merge -s cat_sort_uniq origin/signatures
-    git fetch origin "+refs/tags/$SIGNATURE_TAG:refs/tags/origin/$SIGNATURE_TAG" || true
+	git fetch origin "+refs/tags/$SIGNATURE_TAG:refs/tags/origin/$SIGNATURE_TAG" || true
 }
 
 cmd_push() {
