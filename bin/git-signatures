@@ -228,9 +228,7 @@ default_base() {
 }
 
 sig_subject() {
-	local base="${1:-$(git merge-base master HEAD)}"
-
-	git diff-tree -p "$base"..HEAD \
+	git diff-tree -p "$1"..HEAD \
 	| git patch-id --stable \
 	| cut -d\  -f1
 }
