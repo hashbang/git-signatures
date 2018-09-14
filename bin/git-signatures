@@ -10,8 +10,6 @@ GETOPT=$(command -v gnu-getopt || command -v getopt)
 DATE=$(command -v gdate || command -v date)
 SHUF=$(command -v gshuf || command -v shuf)
 
-SIGNATURE_TAG="latest-signature"
-
 main(){
 	path_check git openssl xargs gpg || exit 1
 
@@ -230,7 +228,7 @@ default_base() {
 sig_subject() {
 	git diff-tree -p "$1"..HEAD \
 	| git patch-id --stable \
-	| cut -d\  -f1
+	| cut -d' ' -f1
 }
 
 sig_parse(){
@@ -316,8 +314,6 @@ cmd_add() {
 	| openssl base64 -A \
 	| git notes --ref signatures append --file=-
 
-	git tag -f "$SIGNATURE_TAG" "$(git rev-parse refs/notes/signatures)"
-
 	[[ "$push" -eq "0" ]] || $PROGRAM push
 }
 
@@ -378,14 +374,8 @@ cmd_init() {
 		remote.origin.fetch \
 		"+refs/notes/signatures:refs/notes/signatures"
 	git config --add \
-		remote.origin.fetch \
-		"+refs/tags/$SIGNATURE_TAG:refs/tags/$SIGNATURE_TAG"
-	git config --add \
 		remote.origin.push \
 		"+refs/notes/signatures:refs/notes/signatures"
-	git config --add \
-		remote.origin.push \
-		"+refs/tags/$SIGNATURE_TAG:refs/tags/$SIGNATURE_TAG"
 	git config --add \
 		notes.rewriteRef \
 		"refs/notes/signatures"
@@ -411,12 +401,11 @@ cmd_pull() {
 	[ "$#" -eq 0 ] || { usage pull; exit 1; }
 	git fetch origin refs/notes/signatures:refs/notes/origin/signatures
 	git notes --ref signatures merge -s cat_sort_uniq origin/signatures
-	git fetch origin "+refs/tags/$SIGNATURE_TAG:refs/tags/origin/$SIGNATURE_TAG" || true
 }
 
 cmd_push() {
 	[ "$#" -eq 0 ] || { usage push; exit 1; }
-	git push origin refs/notes/signatures "+refs/tags/$SIGNATURE_TAG"
+	git push origin refs/notes/signatures
 }
 
 main "$@"
