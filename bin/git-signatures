@@ -314,6 +314,8 @@ cmd_add() {
 	| openssl base64 -A \
 	| git notes --ref signatures append --file=-
 
+	TAG_TARGET=$(git rev-parse refs/notes/signatures 2>/dev/null) && git tag -f latest-signature "$TAG_TARGET"
+
 	[[ "$push" -eq "0" ]] || $PROGRAM push
 }
 
@@ -374,11 +376,17 @@ cmd_init() {
 		remote.origin.fetch \
 		"+refs/notes/signatures:refs/notes/signatures"
 	git config --add \
+		remote.origin.fetch \
+		"+refs/tags/latest-signature:refs/tags/latest-signature"
+	git config --add \
 		remote.origin.push \
 		"+refs/notes/signatures:refs/notes/signatures"
 	git config --add \
 		notes.rewriteRef \
 		"refs/notes/signatures"
+	git config --add \
+		remote.origin.push \
+		"+refs/tags/latest-signature:refs/tags/latest-signature"
 }
 
 cmd_import() {
@@ -399,13 +407,23 @@ cmd_import() {
 
 cmd_pull() {
 	[ "$#" -eq 0 ] || { usage pull; exit 1; }
-	git fetch origin refs/notes/signatures:refs/notes/origin/signatures
+
+	if git rev-parse refs/tags/latest-signature >/dev/null 2>&1; then
+		git fetch origin refs/notes/signatures:refs/notes/origin/signatures +refs/tags/latest-signature:refs/tags/origin/latest-signature
+	else
+		git fetch origin refs/notes/signatures:refs/notes/origin/signatures
+	fi
 	git notes --ref signatures merge -s cat_sort_uniq origin/signatures
 }
 
 cmd_push() {
 	[ "$#" -eq 0 ] || { usage push; exit 1; }
-	git push origin refs/notes/signatures
+
+	if git rev-parse refs/tags/latest-signature >/dev/null 2>&1; then
+		git push origin refs/notes/signatures +refs/tags/latest-signature
+	else
+		git push origin refs/notes/signatures
+	fi
 }
 
 main "$@"

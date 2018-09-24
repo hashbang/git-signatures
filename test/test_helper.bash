@@ -6,7 +6,7 @@ setup(){
 	GNUPGHOME="$(mktemp -d)"; export GNUPGHOME
 	gpg-agent \
 		--daemon \
-		--allow-preset-passphrase 3>- &
+		--allow-preset-passphrase 3>&- &
 	export GPG_AGENT_PID="$!"
 	echo "GPG_AGENT_PID=$GPG_AGENT_PID"
 	gpg --import test/files/keys/*.key
