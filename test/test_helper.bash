@@ -44,6 +44,10 @@ setup(){
 	touch testfile
 	git add .
 	git commit -m "initial commit"
+
+	echo "changes" > testfile
+	git add .
+	git commit -m "second commit"
 }
 
 teardown(){
