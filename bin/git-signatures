@@ -226,7 +226,7 @@ default_base() {
 }
 
 sig_subject() {
-	git diff-tree -p "$1"..HEAD \
+	git diff-tree --indent-heuristic -p "$1"..HEAD \
 	| git patch-id --stable \
 	| cut -d' ' -f1
 }
