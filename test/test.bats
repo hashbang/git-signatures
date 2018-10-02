@@ -86,3 +86,11 @@ load test_helper
 	run git signatures verify --min-count=2
 	[ "$status" -eq 1 ]
 }
+
+@test "signatures can't be spoofed by using silly user names" {
+	git signatures add --key "Silly 1"
+	git signatures add --key "Silly 2"
+	git signatures add --key "Sillier"
+	run git signatures verify --min-count=1
+	[ "$status" -eq 1 ]
+}
