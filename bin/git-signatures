@@ -359,7 +359,7 @@ cmd_verify() {
 	ref=${1:-HEAD}
 	valid_count=$( \
 		cmd_show --raw --trust-db="$trust_db" "$ref" \
-		| grep "ULTIMATE" \
+		| grep "VALIDSIG|ULTIMATE" \
 		| awk -F"|" '{ print $1 }' \
 		| uniq \
 		| wc -l \
