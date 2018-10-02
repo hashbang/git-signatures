@@ -9,9 +9,10 @@ COMMAND="$1"
 GETOPT=$(command -v gnu-getopt || command -v getopt)
 DATE=$(command -v gdate || command -v date)
 SHUF=$(command -v gshuf || command -v shuf)
+GPG=$(command -v gpg2 || command -v gpg || echo gpg)
 
 main(){
-	path_check git openssl xargs gpg sed || exit 1
+	path_check git openssl xargs $GPG sed || exit 1
 
 	case $COMMAND in
 		""|"-h"|"--help"|"help"|"usage") usage "" 0;;
@@ -261,7 +262,7 @@ sig_decode() {
 	local sig="$1"
 		printf '%s' "$sig" \
 		| openssl base64 -d -A \
-		| gpg -d --trustdb-name="$trust_db" --status-fd=1 2> /dev/null
+		| $GPG -d --trustdb-name="$trust_db" --status-fd=1 2> /dev/null
 }
 
 get_sigs() {
@@ -290,10 +291,10 @@ cmd_add() {
 	[ "$#" -gt 2 ] && usage add
 	ref=${1:-HEAD}
 	key=${key_id:-$(git config user.signingKey)}
-	gpg --list-secret-keys "$key" &> /dev/null || error "invalid_private_key" "$key"
+	$GPG --list-secret-keys "$key" &> /dev/null || error "invalid_private_key" "$key"
 	signature=$( \
 		git rev-parse "$ref" \
-		| gpg --sign --local-user "$key" \
+		| $GPG --sign --local-user "$key" \
 		| openssl base64 -A \
 	)
 	printf "%s" "$signature" | git notes --ref signatures append --file=-
@@ -376,11 +377,11 @@ cmd_import() {
 				pgp.mit.edu ) ;
 	do
 		# shellcheck disable=SC2046
-		gpg \
+		$GPG \
 			--keyserver "$server" \
 			--recv-keys $(xargs echo < .gitsigners) && { break || : ; }
 	done
-	sed 's/$/:6:/g' < .gitsigners | gpg --import-ownertrust
+	sed 's/$/:6:/g' < .gitsigners | $GPG --import-ownertrust
 }
 
 cmd_pull() {
