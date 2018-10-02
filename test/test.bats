@@ -57,3 +57,14 @@ load test_helper
 	git signatures add --key "Approver 2"
 	git signatures verify --min-count=3
 }
+
+@test "verify with a revoked key" {
+	git signatures add --key "Approver 1"
+	git signatures add --key "Approver 2"
+	git signatures verify --min-count=2
+
+	gpg --import "$FILES"/keys/approver1.rev
+	git signatures verify --min-count=1
+	run git signatures verify --min-count=2
+	[ "$status" -eq 1 ]
+}
