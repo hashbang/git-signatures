@@ -63,7 +63,7 @@ load test_helper
 	git signatures add --key "Approver 2"
 	git signatures verify --min-count=2
 
-	gpg --import "$FILES"/keys/approver1.rev
+	gpg --import "$FILES"/example.com/approver1.rev
 	git signatures verify --min-count=1
 	run git signatures verify --min-count=2
 	[ "$status" -eq 1 ]

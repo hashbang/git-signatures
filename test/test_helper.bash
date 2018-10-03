@@ -24,8 +24,8 @@ setup(){
 
 	export FILES=$(pwd)/files
 
-	gpg --import "$FILES"/keys/*.key &>/dev/null
-	gpg --import-ownertrust "$FILES"/keys/keys.trust &>/dev/null
+	gpg --import "$FILES"/example.com/*.key &>/dev/null
+	gpg --import-ownertrust "$FILES"/example.com/trust &>/dev/null
 	gpg -k
 
 	export PATH=$(pwd)/../bin:$PATH

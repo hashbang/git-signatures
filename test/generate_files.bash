@@ -3,30 +3,39 @@ set -o errexit
 
 . test_helper.bash
 
+mkdir files
+cd files
+
 setup_gpg
-mkdir -p files/keys
-echo -n > files/keys/keys.trust
 
 make_gpg_key() {
+    set=$1
+    uid=$2
+    name=$3
+    trust=$4
+
     setup_gpg
     gpg --batch --pinentry-mode loopback --yes --passphrase "" \
-        --quick-generate-key "$2" default default never
-    gpg --armor --export-secret-key > files/keys/$1.key
-    cp $GNUPGHOME/openpgp-revocs.d/*.rev files/keys/$1.rev
-    sed -i "s/:---/---/" files/keys/$1.rev
-    if [[ "$3" != "" ]]; then
+        --quick-generate-key "$name <$uid@$set>" default default never
+    gpg --armor --export-secret-key > $set/$uid.key
+    cp $GNUPGHOME/openpgp-revocs.d/*.rev $set/$uid.rev
+    sed -i "s/:---/---/" $set/$uid.rev
+    if [[ "$trust" != "" ]]; then
         grip=$(basename $GNUPGHOME/openpgp-revocs.d/*.rev)
         grip=${grip%.rev}
-        echo "$grip:$3:" >> files/keys/keys.trust
+        echo "$grip:$trust:" >> $set/trust
     fi
     teardown_gpg
 }
 
-make_gpg_key author1   "Author 1 <author1@example.com>"     6
-make_gpg_key approver1 "Approver 1 <approver1@example.com>" 6
-make_gpg_key approver2 "Approver 2 <approver2@example.com>" 6
+mkdir -p example.com
+echo -n > example.com/trust
 
-make_gpg_key sillyUID1 "VALIDSIG|ULTIMATE Silly 1 <bad-person@example.com>"
-make_gpg_key sillyUID2 "VALIDSIG|ULTIMATE| Silly 2 <bad-person@example.com>"
-make_gpg_key sillierUID "Sillier
-DEADBEEF|VALIDSIG|ULTIMATE| <bad-person@example.com>"
+make_gpg_key example.com author1    "Author 1"   6
+make_gpg_key example.com approver1  "Approver 1" 6
+make_gpg_key example.com approver2  "Approver 2" 6
+
+make_gpg_key example.com sillyUID1  "VALIDSIG|ULTIMATE Silly 1"
+make_gpg_key example.com sillyUID2  "VALIDSIG|ULTIMATE| Silly 2"
+make_gpg_key example.com sillierUID "Sillier
+DEADBEEF|VALIDSIG|ULTIMATE|"
