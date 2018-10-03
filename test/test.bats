@@ -58,6 +58,20 @@ load test_helper
 	git signatures verify --min-count=3
 }
 
+@test "verify with an expired key" {
+	PAST='faketime -f -2y'
+	echo "### 2 years ago"
+	$PAST gpg -k
+	$PAST git signatures add --key "Expired 1"
+	$PAST git signatures add --key "Approver 1"
+	$PAST git signatures verify --min-count=2 || true
+
+	echo "### now"
+	git signatures verify --min-count=1
+	run git signatures verify --min-count=2
+	[ "$status" -eq 1 ]
+}
+
 @test "verify with a revoked key" {
 	git signatures add --key "Approver 1"
 	git signatures add --key "Approver 2"
