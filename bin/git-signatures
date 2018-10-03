@@ -305,6 +305,7 @@ get_sigs() {
 		plaintext=$(cat "$plainfile")
 		parse_sigstatus "$rev" "$plaintext" <<< "$status"
 	done
+	status=$? ; [[ $status != 0 ]] && exit $status # TODO: remove after switching to -e
 	rm "$plainfile"
 }
 
@@ -383,6 +384,7 @@ cmd_verify() {
 		| uniq \
 		| wc -l \
 	)
+	status=$? ; [[ $status != 0 ]] && exit $status # TODO: remove after switching to -e
 	[[ "$valid_count" -ge "$min_count" ]] || error "verify_failed" "$min_count"
 }
 
