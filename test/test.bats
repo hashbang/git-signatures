@@ -2,52 +2,124 @@
 
 load test_helper
 
-@test "can add signature to current HEAD" {
-	run git signatures add HEAD
-	[ "$status" -eq 0 ]
+@test "show" {
+	check () {
+		git signatures show
+		git signatures show HEAD
+		git signatures show --raw
+		git signatures show --raw HEAD
+	}
+	check # check it doesn't fail with no signatures
+	git signatures add
+	check # check it doesn't fail some signatures
 }
 
-@test "can add signature to current HEAD with key as argument" {
-	run git signatures add --key "approver1@company.com" HEAD
-	[ "$status" -eq 0 ]
+@test "sign" {
+	sign() {
+		git signatures add $1
+		git signatures add --key "Approver 1" $1
+	}
+	sign
+	run git signatures show --raw
+	[ $(wc -l <<< "$output") = 2 ]
+	sign HEAD
+	run git signatures show --raw
+	[ $(wc -l <<< "$output") = 4 ]
 }
 
-@test "can add signature and automatically push" {
+@test "sign and push" {
 	run git signatures add --push
-	[ "$status" -eq 0 ]
+	THIS=$(git rev-parse HEAD)
+	cd $REPO_REMOTE
+	run git signatures show --raw $THIS
+	[ $(wc -l <<< "$output") = 1 ]
 }
 
-@test "can not add signature to current HEAD with invalid key" {
+@test "invalid keys fail properly" {
+	run git signatures add --key "INVALIDKEY"
+	[ "$status" -eq 1 ]
+
 	git config user.signingKey "INVALIDKEY"
-	run git signatures add HEAD
+
+	run git signatures add
 	[ "$status" -eq 1 ]
 }
 
-@test "can not add signature to current HEAD with invalid key as argument" {
-	run git signatures add --key "INVALIDKEY" HEAD
+@test "verify" {
+	git signatures add
+	git signatures verify --min-count=1
+	run git signatures verify --min-count=2
 	[ "$status" -eq 1 ]
+
+	git signatures add --key "Approver 1"
+	git signatures verify --min-count=2
+
+	git signatures add --key "Approver 2"
+	git signatures verify --min-count=3
 }
 
-@test "can show signatures" {
-	run git signatures show HEAD
-	[ "$status" -eq 0 ]
-}
+@test "verify with an expired key" {
+	PAST='faketime -f -2y'
+	echo "### 2 years ago"
+	$PAST gpg -k
+	$PAST git signatures add --key "Expired 1"
+	$PAST git signatures add --key "Approver 1"
+	$PAST git signatures verify --min-count=2 || true
 
-@test "can show signatures in raw mode" {
-	run git signatures show --raw HEAD
-	[ "$status" -eq 0 ]
-}
-
-@test "can not verify if number of valid sigs below min-count" {
-	git signatures add --push
+	echo "### now"
+	git signatures verify --min-count=1
 	run git signatures verify --min-count=2
 	[ "$status" -eq 1 ]
 }
 
-@test "can verify if number of valid sigs meets min-count" {
-	run git signatures add --key "approver1@company.com" HEAD
-	run git signatures add --key "approver2@company.com" HEAD
+@test "verify with a revoked key" {
+	git signatures add --key "Approver 1"
+	git signatures add --key "Approver 2"
+	git signatures verify --min-count=2
+
+	gpg --import "$FILES"/example.com/approver1.rev
+	git signatures verify --min-count=1
+	run git signatures verify --min-count=2
+	[ "$status" -eq 1 ]
+}
+
+@test "verify with a unknown key" {
+	(
+		cd "$REPO_REMOTE"
+
+		setup_gpg
+		gpg --import "$FILES"/example.org/*.key &>/dev/null
+		gpg --import-ownertrust "$FILES"/example.org/trust &>/dev/null
+		gpg -k
+
+		git signatures add --push # Author 2
+	)
+	run git signatures verify --min-count=1
+	[ "$status" -eq 1 ]
+}
+
+@test "signatures can't be reused (replay attack)" {
+	git signatures add --key "Approver 1"
+	git signatures add --key "Approver 2"
+
+	THAT=$(git rev-parse HEAD~1)
+	THIS=$(git rev-parse HEAD)
+	git checkout refs/notes/signatures
+	cp $THIS $THAT
+	git add .
+	git commit -m "replay attack"
+	echo $(git rev-parse HEAD) > .git/refs/notes/signatures
+
+	git checkout master~1
 	git signatures show >&2
 	run git signatures verify --min-count=2
-	[ "$status" -eq 0 ]
+	[ "$status" -eq 1 ]
+}
+
+@test "signatures can't be spoofed by using silly user names" {
+	git signatures add --key "Silly 1"
+	git signatures add --key "Silly 2"
+	git signatures add --key "Sillier"
+	run git signatures verify --min-count=1
+	[ "$status" -eq 1 ]
 }

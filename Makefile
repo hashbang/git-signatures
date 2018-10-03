@@ -1,11 +1,11 @@
-SHELL=/bin/bash
+SHELL=/usr/bin/env bash
 prefix=$$HOME/.local
 bindir=$(prefix)/bin
 
 all: test
 
 test:
-	bats test/test.bats
+	make -C test
 
 lint:
 	shellcheck bin/git-signatures
@@ -14,4 +14,7 @@ install:
 	mkdir -p $(bindir)
 	install bin/git-signatures $(bindir)
 
-.PHONY: all test lint install
+clean:
+	make -C test clean
+
+.PHONY: all test lint install clean

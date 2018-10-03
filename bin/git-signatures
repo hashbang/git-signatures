@@ -9,12 +9,13 @@ COMMAND="$1"
 GETOPT=$(command -v gnu-getopt || command -v getopt)
 DATE=$(command -v gdate || command -v date)
 SHUF=$(command -v gshuf || command -v shuf)
+GPG=$(command -v gpg2 || command -v gpg || echo gpg)
 
 main(){
-	path_check git openssl xargs gpg || exit 1
+	path_check git openssl xargs $GPG sed || exit 1
 
 	case $COMMAND in
-		""|"-h"|"--help"|"help"|"usage") usage; exit 0;;
+		""|"-h"|"--help"|"help"|"usage") usage "" 0;;
 		"-v"|"--version") cmd_version; exit 0;;
 	esac
 
@@ -26,6 +27,7 @@ main(){
 
 usage() {
 	topic="${1:-}"
+	code="${2:-1}"
 	case $topic in
 
 		"" ) cat <<-EOF
@@ -163,17 +165,14 @@ usage() {
 		;;
 
 	esac
+
+	exit $code
 }
 
 error() {
-	code="${1:-}"
-	case $code in
-
-		"" ) cat <<-EOF
-			Unknown error. Good luck!
-		EOF
-		;;
-
+	reason="${1:-}"
+	code=1
+	case $reason in
 		"invalid_private_key" ) read -r -d '' template  <<-EOF
 			Unable to create signature.
 
@@ -199,10 +198,28 @@ error() {
 		EOF
 		;;
 
+		"gpg_status_fd" ) read -r -d '' template  <<-EOF
+			Unable to parse gpg's status-fd output.
+
+			%s
+		EOF
+		code=99
+		;;
+
+		* ) read -r -d '' template <<-EOF
+			Unknown error. Good luck!
+
+			%s
+		EOF
+		code=100
+		;;
+
 	esac
 
 	# shellcheck disable=SC2059
-	printf "${template}\\n" "${@:2}"
+	printf "${template}\\n" "${@:2}" >&2
+
+	exit $code
 }
 
 path_check() {
@@ -215,55 +232,106 @@ path_check() {
 	return 0
 }
 
-sig_parse(){
-	local sig_raw="$1"
-	local sig_status="unknown"
+parse_sigstatus(){
+	local rev="$1"
+	local sigrev="$2"
+	local sig_key sig_frp sig_primary_frp sig_time sig_date sig_author sig_status sig_valid
 	while read -r values; do
-		local key array sig_key sig_date sig_status sig_author
+		local status_code array pos
 		IFS=" " read -r -a array <<< "$values"
-		key=${array[1]}
-		case $key in
-			"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
-				sig_key="${array[2]}"
-				sig_date="$($DATE -d @"${array[6]}")"
-				sig_status="$key"
-			;;
-			"GOODSIG")
-				sig_author="${values:34}"
-				sig_key="${array[2]}"
-			;;
-			"VALIDSIG")
-				sig_status="$key"
-				sig_date="$($DATE -d @"${array[4]}")"
-			;;
-			"SIG_ID")
-				sig_date="$($DATE -d @"${array[4]}")"
-			;;
-			"NEWSIG")
+		[[ "${array[0]}" == "[GNUPG:]" ]] || error "gpg_status_fd"
+		status_code=${array[1]}
+
+		#echo "$values" >&2
+		# See `doc/DETAILS` in gnupg's repository for the message format
+		# https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob_plain;f=doc/DETAILS
+		case $status_code in
+			NEWSIG)
 				sig_author="${sig_author:-Unknown User <${array[2]}>}"
 			;;
+			GOODSIG|EXPSIG|EXPKEYSIG|REVKEYSIG|BADSIG)
+				sig_key="${array[2]}"
+				pos=$((11+${#status_code}+${#sig_key}))
+				sig_author="${values:$pos}"
+				sig_status="$status_code"
+			;;
+			ERRSIG)
+				sig_key="${array[2]}"
+				sig_time="${array[6]}"
+				sig_fpr="${array[8]}"
+				sig_status="$status_code"
+			;;
+			VALIDSIG)
+				sig_fpr="${array[2]}"
+				sig_time="${array[4]}"
+				sig_primary_frp="${array[11]}"
+				if [[ "$sig_status" == "GOODSIG" ]]; then
+					sig_status="$status_code"
+				fi
+			;;
 			TRUST_*)
-				sig_trust="${key//TRUST_/}"
+				sig_trust="${status_code//TRUST_/}"
+			;;
+			# Things that can be ignored
+			KEYEXPIRED);; # this message is also emitted for expired subkeys
+				      # EXPKEYSIG will be emitted for the key in question
+			KEYREVOKED);; # similarly
+			NO_PUBKEY);;  # will produce ERRSIG
+			KEY_CONSIDERED);;
+			SIG_ID);;
+			PLAINTEXT*);;
+			VERIFICATION_COMPLIANCE_MODE);;
+			# Fallback
+			*)
+				error "gpg_status_fd" "Unknown gpg status code $status_code"
 			;;
 		esac
-	done <<< "$sig_raw"
-	echo -n "$sig_key|$sig_status|$sig_trust|$sig_date|$sig_author"
-}
+	done
 
-sig_decode() {
-	local sig="$1"
-		printf '%s' "$sig" \
-		| openssl base64 -d -A \
-		| gpg -d --trustdb-name="$trust_db" --status-fd=1 2> /dev/null
+	sig_key="${sig_key:-UNKNOWN}"
+	sig_trust="${sig_trust:-UNKNOWN}"
+	if [[ -n "$sig_time" ]]; then
+		sig_date="$($DATE -d @"$sig_time")"
+	else
+		sig_date=UNKNOWN
+	fi
+
+	case "$sig_status" in
+	VALIDSIG)
+		if [[ "$rev" != "$sigrev" ]]; then
+			# this is a replay attack
+			sig_status=INVALID
+		else
+			sig_status=VALID
+		fi
+		;;
+	GOODSIG)  error "gpg_status_fd" "gpg emited GOODSIG status but didn't emit VALIDSIG status, this is unexpected";;
+	EXPSIG);;
+	EXPKEYSIG) sig_status=EXPKEY;;
+	REVKEYSIG) sig_status=REVKEY;;
+	BADSIG) sig_status=INVALID;;
+	ERRSIG) sig_status=UNKNOWN;;
+	*) error "gpg_status_fd" "bad state";;
+	esac
+
+	echo "$sig_key|$sig_status|$sig_trust|$sig_date|$sig_author"
 }
 
 get_sigs() {
 	local ref="$1"
-	while IFS='' read -r line; do
+	local rev=$(git rev-parse "$ref")
+	local plainfile=$(mktemp -qp /dev/shm gpg.XXXXXXXXXX || mktemp gpg.XXXXXXXXXX)
+	local status plaintext
+	{ git notes --ref signatures show "$ref" 2>/dev/null | grep -v "^$" || true; } | while IFS='' read -r line; do
 		# shellcheck disable=SC2005
-		# TODO: Figure out some other way to do this
-		echo "$(sig_parse "$(sig_decode "$line")")"
-	done < <(git notes --ref signatures show "$ref" | grep -v "^$")
+		status=$(echo -n "$line" \
+		| openssl base64 -d -A \
+		| $GPG -d --trustdb-name="$trust_db" --status-fd=3 3>&1 1>"$plainfile" 2>/dev/null)
+		plaintext=$(cat "$plainfile")
+		parse_sigstatus "$rev" "$plaintext" <<< "$status"
+	done
+	status=$? ; [[ $status != 0 ]] && exit $status # TODO: remove after switching to -e
+	rm "$plainfile"
 }
 
 cmd_version() {
@@ -275,20 +343,18 @@ cmd_add() {
 	opts="$($GETOPT -o hpk: -l help,push,key: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
-		-h|--help) usage add; exit 0;;
+		-h|--help) usage add;;
 		-k|--key) key_id="$2"; shift 2 ;;
 		-p|--push) push=1; shift ;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 2 ] && usage add && exit 1
+	[ "$#" -gt 2 ] && usage add
 	ref=${1:-HEAD}
 	key=${key_id:-$(git config user.signingKey)}
-	gpg --list-secret-keys "$key" &> /dev/null || {
-		error "invalid_private_key" "$key"; exit 1;
-	}
+	$GPG --list-secret-keys "$key" &> /dev/null || error "invalid_private_key" "$key"
 	signature=$( \
 		git rev-parse "$ref" \
-		| gpg --sign --local-user "$key" \
+		| $GPG --sign --local-user "$key" \
 		| openssl base64 -A \
 	)
 	printf "%s" "$signature" | git notes --ref signatures append --file=-
@@ -303,12 +369,12 @@ cmd_show() {
 	opts="$($GETOPT -o hrt: -l help,raw,trust-db: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
-		-h|--help) usage show; exit 0;;
+		-h|--help) usage show;;
 		-r|--raw) raw=1; shift ;;
 		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 1 ] && usage show && exit 1
+	[ "$#" -gt 1 ] && usage show
 	ref=${1:-HEAD}
 	if [ "$raw" -ne 1 ]; then
 		printf " %-16s | %-10s | %-9s | %-28s | %-50s \\n" \
@@ -316,12 +382,12 @@ cmd_show() {
 		printf "=%.0s" {1..119}
 		printf "\\n"
 	fi
-	while IFS='' read -r sig_parsed; do
+	get_sigs "$ref" | while IFS='' read -r sig_parsed; do
 		[ "$raw" -eq "1" ] && echo "$sig_parsed" && continue
 		IFS="|" read -d '' -ra sig < <(echo -n "$sig_parsed")
 		printf " %-16s | %-10s | %-9s | %28s | %-50s\\n" \
 			"${sig[0]}" "${sig[1]}" "${sig[2]}" "${sig[3]}" "${sig[4]}"
-	done < <(get_sigs "$ref")
+	done
 }
 
 cmd_verify() {
@@ -329,26 +395,26 @@ cmd_verify() {
 	opts="$($GETOPT -o hm:t: -l help,min-count:,trust-db: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
-		-h|--help) usage verify; exit 0;;
+		-h|--help) usage verify;;
 		-m|--min-count) min_count="$2"; shift 2 ;;
 		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 1 ] && usage verify && exit 1
+	[ "$#" -gt 1 ] && usage verify
 	ref=${1:-HEAD}
 	valid_count=$( \
 		cmd_show --raw --trust-db="$trust_db" "$ref" \
-		| grep "ULTIMATE" \
-		| awk -F"|" '{ print $1 }' \
+		| sed -n 's/^\([^|]*|VALID|ULTIMATE|\).*$/\1/p' \
+		| sort \
 		| uniq \
 		| wc -l \
 	)
-	[[ "$valid_count" -ge "$min_count" ]] || \
-		{ error "verify_failed" "$min_count"; exit 1; }
+	status=$? ; [[ $status != 0 ]] && exit $status # TODO: remove after switching to -e
+	[[ "$valid_count" -ge "$min_count" ]] || error "verify_failed" "$min_count"
 }
 
 cmd_init() {
-	[ "$#" -eq 0 ] || { usage init; exit 1; }
+	[ "$#" -eq 0 ] || usage init
 	git config --add \
 		remote.origin.fetch \
 		"+refs/notes/signatures:refs/notes/signatures"
@@ -364,23 +430,23 @@ cmd_init() {
 }
 
 cmd_import() {
-	[ "$#" -eq 0 ] || { usage import; exit 1; }
+	[ "$#" -eq 0 ] || usage import
 	for server in $($SHUF -e ha.pool.sks-keyservers.net \
-	                        hkp://p80.pool.sks-keyservers.net:80 \
-	                        keyserver.ubuntu.com \
-	                        hkp://keyserver.ubuntu.com:80 \
-	                        pgp.mit.edu ) ;
+				hkp://p80.pool.sks-keyservers.net:80 \
+				keyserver.ubuntu.com \
+				hkp://keyserver.ubuntu.com:80 \
+				pgp.mit.edu ) ;
 	do
 		# shellcheck disable=SC2046
-		gpg \
+		$GPG \
 			--keyserver "$server" \
 			--recv-keys $(xargs echo < .gitsigners) && { break || : ; }
 	done
-	sed 's/$/:6:/g' < .gitsigners | gpg --import-ownertrust
+	sed 's/$/:6:/g' < .gitsigners | $GPG --import-ownertrust
 }
 
 cmd_pull() {
-	[ "$#" -eq 0 ] || { usage pull; exit 1; }
+	[ "$#" -eq 0 ] || usage pull
 
 	if git rev-parse refs/tags/latest-signature >/dev/null 2>&1; then
 		git fetch origin refs/notes/signatures:refs/notes/origin/signatures +refs/tags/latest-signature:refs/tags/origin/latest-signature
@@ -391,7 +457,7 @@ cmd_pull() {
 }
 
 cmd_push() {
-	[ "$#" -eq 0 ] || { usage push; exit 1; }
+	[ "$#" -eq 0 ] || usage push
 
 	if git rev-parse refs/tags/latest-signature >/dev/null 2>&1; then
 		git push origin refs/notes/signatures +refs/tags/latest-signature
