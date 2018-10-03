@@ -215,6 +215,22 @@ path_check() {
 	return 0
 }
 
+default_base() {
+	# are we signing the genesis commit?
+	git rev-parse HEAD^ 1>/dev/null 2>&1
+	if [ "$?" -eq 128 ]; then
+		echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+	else
+		echo "HEAD^"
+	fi
+}
+
+sig_subject() {
+	git -c diff.indentHeuristic=false diff-tree -p "$1"..HEAD \
+	| git patch-id --stable \
+	| cut -d' ' -f1
+}
+
 sig_parse(){
 	local sig_raw="$1"
 	local sig_status="unknown"
@@ -225,7 +241,6 @@ sig_parse(){
 		case $key in
 			"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
 				sig_key="${array[2]}"
-				sig_date="$($DATE -d @"${array[6]}")"
 				sig_status="$key"
 			;;
 			"GOODSIG")
@@ -252,17 +267,19 @@ sig_parse(){
 
 sig_decode() {
 	local sig="$1"
-		printf '%s' "$sig" \
-		| openssl base64 -d -A \
-		| gpg -d --trustdb-name="$trust_db" --status-fd=1 2> /dev/null
+	local base="$2"
+	gpg --verify --trustdb-name="$trust_db" --status-fd=1 \
+	<(printf '%s' "$sig" | openssl base64 -d -A) \
+	<(sig_subject "$base") 2>/dev/null
 }
 
 get_sigs() {
 	local ref="$1"
+	local base="$2"
 	while IFS='' read -r line; do
 		# shellcheck disable=SC2005
 		# TODO: Figure out some other way to do this
-		echo "$(sig_parse "$(sig_decode "$line")")"
+		echo "$(sig_parse "$(sig_decode "$line" "$base")")"
 	done < <(git notes --ref signatures show "$ref" | grep -v "^$")
 }
 
@@ -281,17 +298,21 @@ cmd_add() {
 		--) shift; break ;;
 	esac done
 	[ "$#" -gt 2 ] && usage add && exit 1
+
 	ref=${1:-HEAD}
+	base=${2:-$(default_base)}
 	key=${key_id:-$(git config user.signingKey)}
 	gpg --list-secret-keys "$key" &> /dev/null || {
 		error "invalid_private_key" "$key"; exit 1;
 	}
-	signature=$( \
-		git rev-parse "$ref" \
-		| gpg --sign --local-user "$key" \
-		| openssl base64 -A \
-	)
-	printf "%s" "$signature" | git notes --ref signatures append --file=-
+
+	# check for HEAD equal to base
+	[ "$(git rev-parse "$base")" == "$(git rev-parse HEAD)" ] && echo "error: cannot sign empty diff" && exit 1
+
+	sig_subject "$base" \
+	| gpg --detach-sign --local-user "$key" \
+	| openssl base64 -A \
+	| git notes --ref signatures append --file=-
 
 	TAG_TARGET=$(git rev-parse refs/notes/signatures 2>/dev/null) && git tag -f latest-signature "$TAG_TARGET"
 
@@ -308,8 +329,9 @@ cmd_show() {
 		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 1 ] && usage show && exit 1
+	[ "$#" -gt 2 ] && usage show && exit 1
 	ref=${1:-HEAD}
+	base=${2:-$(default_base)}
 	if [ "$raw" -ne 1 ]; then
 		printf " %-16s | %-10s | %-9s | %-28s | %-50s \\n" \
 			"Public Key ID" "Status" "Trust" "Date" "Signer Name"
@@ -321,7 +343,7 @@ cmd_show() {
 		IFS="|" read -d '' -ra sig < <(echo -n "$sig_parsed")
 		printf " %-16s | %-10s | %-9s | %28s | %-50s\\n" \
 			"${sig[0]}" "${sig[1]}" "${sig[2]}" "${sig[3]}" "${sig[4]}"
-	done < <(get_sigs "$ref")
+	done < <(get_sigs "$ref" "$base")
 }
 
 cmd_verify() {
@@ -334,10 +356,11 @@ cmd_verify() {
 		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 1 ] && usage verify && exit 1
+	[ "$#" -gt 2 ] && usage verify && exit 1
 	ref=${1:-HEAD}
+	base=${2:-$(default_base)}
 	valid_count=$( \
-		cmd_show --raw --trust-db="$trust_db" "$ref" \
+		cmd_show --raw --trust-db="$trust_db" "$ref" "$base" \
 		| grep "ULTIMATE" \
 		| awk -F"|" '{ print $1 }' \
 		| uniq \
@@ -359,6 +382,9 @@ cmd_init() {
 		remote.origin.push \
 		"+refs/notes/signatures:refs/notes/signatures"
 	git config --add \
+		notes.rewriteRef \
+		"refs/notes/signatures"
+	git config --add \
 		remote.origin.push \
 		"+refs/tags/latest-signature:refs/tags/latest-signature"
 }
@@ -366,10 +392,10 @@ cmd_init() {
 cmd_import() {
 	[ "$#" -eq 0 ] || { usage import; exit 1; }
 	for server in $($SHUF -e ha.pool.sks-keyservers.net \
-	                        hkp://p80.pool.sks-keyservers.net:80 \
-	                        keyserver.ubuntu.com \
-	                        hkp://keyserver.ubuntu.com:80 \
-	                        pgp.mit.edu ) ;
+		hkp://p80.pool.sks-keyservers.net:80 \
+		keyserver.ubuntu.com \
+		hkp://keyserver.ubuntu.com:80 \
+		pgp.mit.edu ) ;
 	do
 		# shellcheck disable=SC2046
 		gpg \
