@@ -235,60 +235,85 @@ path_check() {
 parse_sigstatus(){
 	local rev="$1"
 	local sigrev="$2"
-	local sig_status
+	local sig_key sig_frp sig_primary_frp sig_time sig_date sig_author sig_status sig_valid
 	while read -r values; do
-		local key array sig_key sig_time sig_date sig_status sig_author
+		local status_code array pos
 		IFS=" " read -r -a array <<< "$values"
 		[[ "${array[0]}" == "[GNUPG:]" ]] || error "gpg_status_fd"
-		key=${array[1]}
-		case $key in
-			"NEWSIG")
+		status_code=${array[1]}
+
+		#echo "$values" >&2
+		# See `doc/DETAILS` in gnupg's repository for the message format
+		# https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob_plain;f=doc/DETAILS
+		case $status_code in
+			NEWSIG)
 				sig_author="${sig_author:-Unknown User <${array[2]}>}"
 			;;
-			"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG")
+			GOODSIG|EXPSIG|EXPKEYSIG|REVKEYSIG|BADSIG)
+				sig_key="${array[2]}"
+				pos=$((11+${#status_code}+${#sig_key}))
+				sig_author="${values:$pos}"
+				sig_status="$status_code"
+			;;
+			ERRSIG)
 				sig_key="${array[2]}"
 				sig_time="${array[6]}"
-				sig_status="$key"
+				sig_fpr="${array[8]}"
+				sig_status="$status_code"
 			;;
-			"REVKEYSIG")
-				sig_key="${array[2]}"
-				sig_author="${values:36}"
-				sig_status="REVOKED"
-			;;
-			"KEYREVOKED")
-				sig_status="REVOKED"
-			;;
-			"GOODSIG")
-				sig_key="${array[2]}"
-				sig_author="${values:34}"
-			;;
-			"VALIDSIG")
+			VALIDSIG)
+				sig_fpr="${array[2]}"
 				sig_time="${array[4]}"
-				sig_status="${sig_status:-$key}"
-			;;
-			"SIG_ID")
-				sig_time="${array[4]}"
-			;;
-			*SIG)
-				error "" "Unknown gpg sig status type $key"
+				sig_primary_frp="${array[11]}"
+				if [[ "$sig_status" == "GOODSIG" ]]; then
+					sig_status="$status_code"
+				fi
 			;;
 			TRUST_*)
-				sig_trust="${key//TRUST_/}"
+				sig_trust="${status_code//TRUST_/}"
 			;;
+			# Things that can be ignored
+			KEYEXPIRED);; # this message is also emitted for expired subkeys
+				      # EXPKEYSIG will be emitted for the key in question
+			KEYREVOKED);; # similarly
+			NO_PUBKEY);;  # will produce ERRSIG
 			KEY_CONSIDERED);;
+			SIG_ID);;
 			PLAINTEXT*);;
 			VERIFICATION_COMPLIANCE_MODE);;
+			# Fallback
 			*)
-				error "gpg_status_fd" "Unknown gpg status code $key"
+				error "gpg_status_fd" "Unknown gpg status code $status_code"
 			;;
 		esac
 	done
-	sig_date="$($DATE -d @"$sig_time")"
-	sig_status="${sig_status:-UNKNOWN}"
-	if [[ "$rev" != "$sigrev" ]]; then
-		# this is a replay attack
-		sig_status=BADSIG
+
+	sig_key="${sig_key:-UNKNOWN}"
+	sig_trust="${sig_trust:-UNKNOWN}"
+	if [[ -n "$sig_time" ]]; then
+		sig_date="$($DATE -d @"$sig_time")"
+	else
+		sig_date=UNKNOWN
 	fi
+
+	case "$sig_status" in
+	VALIDSIG)
+		if [[ "$rev" != "$sigrev" ]]; then
+			# this is a replay attack
+			sig_status=INVALID
+		else
+			sig_status=VALID
+		fi
+		;;
+	GOODSIG)  error "gpg_status_fd" "gpg emited GOODSIG status but didn't emit VALIDSIG status, this is unexpected";;
+	EXPSIG);;
+	EXPKEYSIG) sig_status=EXPKEY;;
+	REVKEYSIG) sig_status=REVKEY;;
+	BADSIG) sig_status=INVALID;;
+	ERRSIG) sig_status=UNKNOWN;;
+	*) error "gpg_status_fd" "bad state";;
+	esac
+
 	echo "$sig_key|$sig_status|$sig_trust|$sig_date|$sig_author"
 }
 
@@ -379,7 +404,7 @@ cmd_verify() {
 	ref=${1:-HEAD}
 	valid_count=$( \
 		cmd_show --raw --trust-db="$trust_db" "$ref" \
-		| sed -n 's/^\([^|]*|VALIDSIG|ULTIMATE|\).*$/\1/p' \
+		| sed -n 's/^\([^|]*|VALID|ULTIMATE|\).*$/\1/p' \
 		| sort \
 		| uniq \
 		| wc -l \

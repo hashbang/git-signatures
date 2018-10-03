@@ -39,10 +39,10 @@ make_gpg_key example.com approver2  "Approver 2" 6
 
 make_gpg_key example.com expired1   "Expired 1"  6 "1y"
 
-make_gpg_key example.com sillyUID1  "VALIDSIG|ULTIMATE Silly 1"
-make_gpg_key example.com sillyUID2  "VALIDSIG|ULTIMATE| Silly 2"
+make_gpg_key example.com sillyUID1  "VALID|ULTIMATE Silly 1"
+make_gpg_key example.com sillyUID2  "VALID|ULTIMATE| Silly 2"
 make_gpg_key example.com sillierUID "Sillier
-DEADBEEF|VALIDSIG|ULTIMATE|"
+DEADBEEF|VALID|ULTIMATE|"
 
 mkdir -p example.org
 echo -n > example.org/trust
