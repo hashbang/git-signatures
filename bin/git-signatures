@@ -366,10 +366,10 @@ cmd_init() {
 cmd_import() {
 	[ "$#" -eq 0 ] || { usage import; exit 1; }
 	for server in $($SHUF -e ha.pool.sks-keyservers.net \
-	                        hkp://p80.pool.sks-keyservers.net:80 \
-	                        keyserver.ubuntu.com \
-	                        hkp://keyserver.ubuntu.com:80 \
-	                        pgp.mit.edu ) ;
+				hkp://p80.pool.sks-keyservers.net:80 \
+				keyserver.ubuntu.com \
+				hkp://keyserver.ubuntu.com:80 \
+				pgp.mit.edu ) ;
 	do
 		# shellcheck disable=SC2046
 		gpg \
