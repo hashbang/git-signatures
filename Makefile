@@ -1,4 +1,4 @@
-SHELL=/bin/bash
+SHELL=/usr/bin/env bash
 prefix=$$HOME/.local
 bindir=$(prefix)/bin
 
