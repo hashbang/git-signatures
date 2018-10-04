@@ -170,9 +170,9 @@ usage() {
 }
 
 error() {
-	code="${1:-}"
-	case $code in
-
+	reason="${1:-}"
+	code=1
+	case $reason in
 		"invalid_private_key" ) read -r -d '' template  <<-EOF
 			Unable to create signature.
 
@@ -198,11 +198,20 @@ error() {
 		EOF
 		;;
 
+		"gpg_status_fd" ) read -r -d '' template  <<-EOF
+			Unable to parse gpg's status-fd output.
+
+			%s
+		EOF
+		code=99
+		;;
+
 		* ) read -r -d '' template <<-EOF
 			Unknown error. Good luck!
 
 			%s
 		EOF
+		code=100
 		;;
 
 	esac
@@ -210,7 +219,7 @@ error() {
 	# shellcheck disable=SC2059
 	printf "${template}\\n" "${@:2}" >&2
 
-	exit 1
+	exit $code
 }
 
 path_check() {
@@ -230,7 +239,7 @@ parse_sigstatus(){
 	while read -r values; do
 		local key array sig_key sig_time sig_date sig_status sig_author
 		IFS=" " read -r -a array <<< "$values"
-		[[ "${array[0]}" == "[GNUPG:]" ]] || error
+		[[ "${array[0]}" == "[GNUPG:]" ]] || error "gpg_status_fd"
 		key=${array[1]}
 		case $key in
 			"NEWSIG")
@@ -270,7 +279,7 @@ parse_sigstatus(){
 			PLAINTEXT*);;
 			VERIFICATION_COMPLIANCE_MODE);;
 			*)
-				error "" "Unknown gpg keyword $key"
+				error "gpg_status_fd" "Unknown gpg status code $key"
 			;;
 		esac
 	done
