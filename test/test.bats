@@ -98,6 +98,27 @@ load test_helper
 	[ "$status" -eq 1 ]
 }
 
+@test "verify with a broken signature" {
+	git signatures add
+
+	THIS=$(git rev-parse HEAD)
+	git checkout refs/notes/signatures
+	openssl base64 -d -A < $THIS > decoded
+	head -c -16 decoded > broken
+	head -c 16 /dev/zero >> broken
+	gpg --list-packets < broken
+	openssl base64 -A < broken > $THIS
+	git add .
+	git commit -m "broken signature packet"
+	echo $(git rev-parse HEAD) > .git/refs/notes/signatures
+
+	git checkout master
+	run git signatures verify --min-count=1
+	[ "$status" -eq 1 ]
+	run git signatures show --raw
+	[ $(grep "BADSIG" <<< "$output" | wc -l) = 1 ]
+}
+
 @test "signatures can't be reused (replay attack)" {
 	git signatures add --key "Approver 1"
 	git signatures add --key "Approver 2"
