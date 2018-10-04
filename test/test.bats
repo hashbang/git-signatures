@@ -83,6 +83,21 @@ load test_helper
 	[ "$status" -eq 1 ]
 }
 
+@test "verify with a unknown key" {
+	(
+		cd "$REPO_REMOTE"
+
+		setup_gpg
+		gpg --import "$FILES"/example.org/*.key &>/dev/null
+		gpg --import-ownertrust "$FILES"/example.org/trust &>/dev/null
+		gpg -k
+
+		git signatures add --push # Author 2
+	)
+	run git signatures verify --min-count=1
+	[ "$status" -eq 1 ]
+}
+
 @test "signatures can't be reused (replay attack)" {
 	git signatures add --key "Approver 1"
 	git signatures add --key "Approver 2"

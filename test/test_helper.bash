@@ -32,11 +32,10 @@ setup(){
 
 	export REPO_REMOTE=$(mktemp -d)
 	export REPO_LOCAL=$(mktemp -d)
-	git init --bare "$REPO_REMOTE"
+	git init "$REPO_REMOTE"
 	git clone "$REPO_REMOTE" "$REPO_LOCAL"
 
 	cd "$REPO_LOCAL"
-
 	git config user.name "Author 1"
 	git config user.email "author1@example.com"
 	git config user.signingkey "author1@example.com"
@@ -48,6 +47,18 @@ setup(){
 	echo "changes" > testfile
 	git add .
 	git commit -m "second commit"
+
+	cd "$REPO_REMOTE"
+	git config user.name "Author 2"
+	git config user.email "author2@example.org"
+	git config user.signingkey "author2@example.org"
+
+	git remote add origin "$REPO_LOCAL"
+	git fetch origin
+	git checkout -b master origin/master
+	git pull
+
+	cd "$REPO_LOCAL"
 }
 
 teardown(){

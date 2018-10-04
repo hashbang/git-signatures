@@ -43,3 +43,8 @@ make_gpg_key example.com sillyUID1  "VALIDSIG|ULTIMATE Silly 1"
 make_gpg_key example.com sillyUID2  "VALIDSIG|ULTIMATE| Silly 2"
 make_gpg_key example.com sillierUID "Sillier
 DEADBEEF|VALIDSIG|ULTIMATE|"
+
+mkdir -p example.org
+echo -n > example.org/trust
+
+make_gpg_key example.org author2    "Author 2"   6
