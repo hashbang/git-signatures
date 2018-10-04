@@ -223,55 +223,70 @@ path_check() {
 	return 0
 }
 
-sig_parse(){
-	local sig_raw="$1"
-	local sig_status="unknown"
+parse_sigstatus(){
+	local sig_status
 	while read -r values; do
-		local key array sig_key sig_date sig_status sig_author
+		local key array sig_key sig_time sig_date sig_status sig_author
 		IFS=" " read -r -a array <<< "$values"
+		[[ "${array[0]}" == "[GNUPG:]" ]] || error
 		key=${array[1]}
 		case $key in
-			"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG"|"REVKEYSIG")
-				sig_key="${array[2]}"
-				sig_date="$($DATE -d @"${array[6]}")"
-				sig_status="$key"
-			;;
-			"GOODSIG")
-				sig_author="${values:34}"
-				sig_key="${array[2]}"
-			;;
-			"VALIDSIG")
-				sig_status="$key"
-				sig_date="$($DATE -d @"${array[4]}")"
-			;;
-			"SIG_ID")
-				sig_date="$($DATE -d @"${array[4]}")"
-			;;
 			"NEWSIG")
 				sig_author="${sig_author:-Unknown User <${array[2]}>}"
+			;;
+			"BADSIG"|"ERRSIG"|"EXPSIG"|"EXPKEYSIG")
+				sig_key="${array[2]}"
+				sig_time="${array[6]}"
+				sig_status="$key"
+			;;
+			"REVKEYSIG")
+				sig_key="${array[2]}"
+				sig_author="${values:36}"
+				sig_status="REVOKED"
+			;;
+			"KEYREVOKED")
+				sig_status="REVOKED"
+			;;
+			"GOODSIG")
+				sig_key="${array[2]}"
+				sig_author="${values:34}"
+			;;
+			"VALIDSIG")
+				sig_time="${array[4]}"
+				sig_status="${sig_status:-$key}"
+			;;
+			"SIG_ID")
+				sig_time="${array[4]}"
+			;;
+			*SIG)
+				error "" "Unknown gpg sig status type $key"
 			;;
 			TRUST_*)
 				sig_trust="${key//TRUST_/}"
 			;;
+			KEY_CONSIDERED);;
+			PLAINTEXT*);;
+			VERIFICATION_COMPLIANCE_MODE);;
+			*)
+				error "" "Unknown gpg keyword $key"
+			;;
 		esac
-	done <<< "$sig_raw"
-	echo -n "$sig_key|$sig_status|$sig_trust|$sig_date|$sig_author"
-}
-
-sig_decode() {
-	local sig="$1"
-		printf '%s' "$sig" \
-		| openssl base64 -d -A \
-		| $GPG -d --trustdb-name="$trust_db" --status-fd=1 2> /dev/null
+	done
+	sig_date="$($DATE -d @"$sig_time")"
+	sig_status="${sig_status:-UNKNOWN}"
+	echo "$sig_key|$sig_status|$sig_trust|$sig_date|$sig_author"
 }
 
 get_sigs() {
 	local ref="$1"
-	while IFS='' read -r line; do
+	local status
+	{ git notes --ref signatures show "$ref" 2>/dev/null | grep -v "^$" || true; } | while IFS='' read -r line; do
 		# shellcheck disable=SC2005
-		# TODO: Figure out some other way to do this
-		echo "$(sig_parse "$(sig_decode "$line")")"
-	done < <(git notes --ref signatures show "$ref" | grep -v "^$")
+		status=$(echo -n "$line" \
+		| openssl base64 -d -A \
+		| $GPG -d --trustdb-name="$trust_db" --status-fd=3 3>&1 1>/dev/null 2>/dev/null)
+		parse_sigstatus <<< "$status"
+	done
 }
 
 cmd_version() {
@@ -322,12 +337,12 @@ cmd_show() {
 		printf "=%.0s" {1..119}
 		printf "\\n"
 	fi
-	while IFS='' read -r sig_parsed; do
+	get_sigs "$ref" | while IFS='' read -r sig_parsed; do
 		[ "$raw" -eq "1" ] && echo "$sig_parsed" && continue
 		IFS="|" read -d '' -ra sig < <(echo -n "$sig_parsed")
 		printf " %-16s | %-10s | %-9s | %28s | %-50s\\n" \
 			"${sig[0]}" "${sig[1]}" "${sig[2]}" "${sig[3]}" "${sig[4]}"
-	done < <(get_sigs "$ref")
+	done
 }
 
 cmd_verify() {
