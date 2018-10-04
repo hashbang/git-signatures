@@ -224,6 +224,8 @@ path_check() {
 }
 
 parse_sigstatus(){
+	local rev="$1"
+	local sigrev="$2"
 	local sig_status
 	while read -r values; do
 		local key array sig_key sig_time sig_date sig_status sig_author
@@ -274,19 +276,27 @@ parse_sigstatus(){
 	done
 	sig_date="$($DATE -d @"$sig_time")"
 	sig_status="${sig_status:-UNKNOWN}"
+	if [[ "$rev" != "$sigrev" ]]; then
+		# this is a replay attack
+		sig_status=BADSIG
+	fi
 	echo "$sig_key|$sig_status|$sig_trust|$sig_date|$sig_author"
 }
 
 get_sigs() {
 	local ref="$1"
-	local status
+	local rev=$(git rev-parse "$ref")
+	local plainfile=$(mktemp -qp /dev/shm gpg.XXXXXXXXXX || mktemp gpg.XXXXXXXXXX)
+	local status plaintext
 	{ git notes --ref signatures show "$ref" 2>/dev/null | grep -v "^$" || true; } | while IFS='' read -r line; do
 		# shellcheck disable=SC2005
 		status=$(echo -n "$line" \
 		| openssl base64 -d -A \
-		| $GPG -d --trustdb-name="$trust_db" --status-fd=3 3>&1 1>/dev/null 2>/dev/null)
-		parse_sigstatus <<< "$status"
+		| $GPG -d --trustdb-name="$trust_db" --status-fd=3 3>&1 1>"$plainfile" 2>/dev/null)
+		plaintext=$(cat "$plainfile")
+		parse_sigstatus "$rev" "$plaintext" <<< "$status"
 	done
+	rm "$plainfile"
 }
 
 cmd_version() {
