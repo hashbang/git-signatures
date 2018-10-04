@@ -53,9 +53,14 @@ load test_helper
 
 	git signatures add --key "Approver 1"
 	git signatures verify --min-count=2
+	run git signatures verify --min-count=3
+	[ "$status" -eq 1 ]
 
 	git signatures add --key "Approver 2"
 	git signatures verify --min-count=3
+	run git signatures show --raw
+	[ $(grep "VALID" <<< "$output" | wc -l) = 3 ]
+	[ $(grep "ULTIMATE" <<< "$output" | wc -l) = 3 ]
 }
 
 @test "verify with an expired key" {
@@ -70,6 +75,8 @@ load test_helper
 	git signatures verify --min-count=1
 	run git signatures verify --min-count=2
 	[ "$status" -eq 1 ]
+	run git signatures show --raw
+	[ $(grep "EXPKEY" <<< "$output" | wc -l) = 1 ]
 }
 
 @test "verify with a revoked key" {
@@ -81,6 +88,8 @@ load test_helper
 	git signatures verify --min-count=1
 	run git signatures verify --min-count=2
 	[ "$status" -eq 1 ]
+	run git signatures show --raw
+	[ $(grep "REVKEY" <<< "$output" | wc -l) = 1 ]
 }
 
 @test "verify with a unknown key" {
@@ -96,6 +105,8 @@ load test_helper
 	)
 	run git signatures verify --min-count=1
 	[ "$status" -eq 1 ]
+	run git signatures show --raw
+	[ $(grep "UNKNOWN" <<< "$output" | wc -l) = 1 ]
 }
 
 @test "verify with a broken signature" {
@@ -132,9 +143,10 @@ load test_helper
 	echo $(git rev-parse HEAD) > .git/refs/notes/signatures
 
 	git checkout master~1
-	git signatures show >&2
-	run git signatures verify --min-count=2
+	run git signatures verify --min-count=1
 	[ "$status" -eq 1 ]
+	run git signatures show --raw
+	[ $(grep "INVALID" <<< "$output" | wc -l) = 2 ]
 }
 
 @test "signatures can't be spoofed by using silly user names" {
@@ -143,4 +155,6 @@ load test_helper
 	git signatures add --key "Sillier"
 	run git signatures verify --min-count=1
 	[ "$status" -eq 1 ]
+	run git signatures show --raw
+	[ $(grep "UNDEFINED" <<< "$output" | wc -l) = 3 ]
 }
