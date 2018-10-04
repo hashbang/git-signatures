@@ -25,3 +25,8 @@ make_gpg_key() {
 make_gpg_key author1   "Author 1 <author1@example.com>"     6
 make_gpg_key approver1 "Approver 1 <approver1@example.com>" 6
 make_gpg_key approver2 "Approver 2 <approver2@example.com>" 6
+
+make_gpg_key sillyUID1 "VALIDSIG|ULTIMATE Silly 1 <bad-person@example.com>"
+make_gpg_key sillyUID2 "VALIDSIG|ULTIMATE| Silly 2 <bad-person@example.com>"
+make_gpg_key sillierUID "Sillier
+DEADBEEF|VALIDSIG|ULTIMATE| <bad-person@example.com>"
