@@ -354,7 +354,7 @@ cmd_add() {
 	$GPG --list-secret-keys "$key" &> /dev/null || error "invalid_private_key" "$key"
 	signature=$( \
 		git rev-parse "$ref" \
-		| $GPG --sign --local-user "$key" \
+		| $GPG --compress-algo none --sign --local-user "$key" \
 		| openssl base64 -A \
 	)
 	printf "%s" "$signature" | git notes --ref signatures append --file=-
