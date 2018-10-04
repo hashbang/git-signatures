@@ -116,7 +116,7 @@ load test_helper
 	run git signatures verify --min-count=1
 	[ "$status" -eq 1 ]
 	run git signatures show --raw
-	[ $(grep "BADSIG" <<< "$output" | wc -l) = 1 ]
+	[ $(grep "INVALID" <<< "$output" | wc -l) = 1 ]
 }
 
 @test "signatures can't be reused (replay attack)" {
