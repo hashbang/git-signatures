@@ -14,7 +14,7 @@ main(){
 	path_check git openssl xargs gpg sed || exit 1
 
 	case $COMMAND in
-		""|"-h"|"--help"|"help"|"usage") usage; exit 0;;
+		""|"-h"|"--help"|"help"|"usage") usage "" 0;;
 		"-v"|"--version") cmd_version; exit 0;;
 	esac
 
@@ -26,6 +26,7 @@ main(){
 
 usage() {
 	topic="${1:-}"
+	code="${2:-1}"
 	case $topic in
 
 		"" ) cat <<-EOF
@@ -163,16 +164,13 @@ usage() {
 		;;
 
 	esac
+
+	exit $code
 }
 
 error() {
 	code="${1:-}"
 	case $code in
-
-		"" ) cat <<-EOF
-			Unknown error. Good luck!
-		EOF
-		;;
 
 		"invalid_private_key" ) read -r -d '' template  <<-EOF
 			Unable to create signature.
@@ -199,10 +197,19 @@ error() {
 		EOF
 		;;
 
+		* ) read -r -d '' template <<-EOF
+			Unknown error. Good luck!
+
+			%s
+		EOF
+		;;
+
 	esac
 
 	# shellcheck disable=SC2059
-	printf "${template}\\n" "${@:2}"
+	printf "${template}\\n" "${@:2}" >&2
+
+	exit 1
 }
 
 path_check() {
@@ -275,17 +282,15 @@ cmd_add() {
 	opts="$($GETOPT -o hpk: -l help,push,key: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
-		-h|--help) usage add; exit 0;;
+		-h|--help) usage add;;
 		-k|--key) key_id="$2"; shift 2 ;;
 		-p|--push) push=1; shift ;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 2 ] && usage add && exit 1
+	[ "$#" -gt 2 ] && usage add
 	ref=${1:-HEAD}
 	key=${key_id:-$(git config user.signingKey)}
-	gpg --list-secret-keys "$key" &> /dev/null || {
-		error "invalid_private_key" "$key"; exit 1;
-	}
+	gpg --list-secret-keys "$key" &> /dev/null || error "invalid_private_key" "$key"
 	signature=$( \
 		git rev-parse "$ref" \
 		| gpg --sign --local-user "$key" \
@@ -303,12 +308,12 @@ cmd_show() {
 	opts="$($GETOPT -o hrt: -l help,raw,trust-db: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
-		-h|--help) usage show; exit 0;;
+		-h|--help) usage show;;
 		-r|--raw) raw=1; shift ;;
 		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 1 ] && usage show && exit 1
+	[ "$#" -gt 1 ] && usage show
 	ref=${1:-HEAD}
 	if [ "$raw" -ne 1 ]; then
 		printf " %-16s | %-10s | %-9s | %-28s | %-50s \\n" \
@@ -329,12 +334,12 @@ cmd_verify() {
 	opts="$($GETOPT -o hm:t: -l help,min-count:,trust-db: -n "$PROGRAM" -- "$@")";
 	eval set -- "$opts"
 	while true; do case $1 in
-		-h|--help) usage verify; exit 0;;
+		-h|--help) usage verify;;
 		-m|--min-count) min_count="$2"; shift 2 ;;
 		-t|--trust-db) trust_db="$2"; shift 2;;
 		--) shift; break ;;
 	esac done
-	[ "$#" -gt 1 ] && usage verify && exit 1
+	[ "$#" -gt 1 ] && usage verify
 	ref=${1:-HEAD}
 	valid_count=$( \
 		cmd_show --raw --trust-db="$trust_db" "$ref" \
@@ -343,12 +348,11 @@ cmd_verify() {
 		| uniq \
 		| wc -l \
 	)
-	[[ "$valid_count" -ge "$min_count" ]] || \
-		{ error "verify_failed" "$min_count"; exit 1; }
+	[[ "$valid_count" -ge "$min_count" ]] || error "verify_failed" "$min_count"
 }
 
 cmd_init() {
-	[ "$#" -eq 0 ] || { usage init; exit 1; }
+	[ "$#" -eq 0 ] || usage init
 	git config --add \
 		remote.origin.fetch \
 		"+refs/notes/signatures:refs/notes/signatures"
@@ -364,7 +368,7 @@ cmd_init() {
 }
 
 cmd_import() {
-	[ "$#" -eq 0 ] || { usage import; exit 1; }
+	[ "$#" -eq 0 ] || usage import
 	for server in $($SHUF -e ha.pool.sks-keyservers.net \
 				hkp://p80.pool.sks-keyservers.net:80 \
 				keyserver.ubuntu.com \
@@ -380,7 +384,7 @@ cmd_import() {
 }
 
 cmd_pull() {
-	[ "$#" -eq 0 ] || { usage pull; exit 1; }
+	[ "$#" -eq 0 ] || usage pull
 
 	if git rev-parse refs/tags/latest-signature >/dev/null 2>&1; then
 		git fetch origin refs/notes/signatures:refs/notes/origin/signatures +refs/tags/latest-signature:refs/tags/origin/latest-signature
@@ -391,7 +395,7 @@ cmd_pull() {
 }
 
 cmd_push() {
-	[ "$#" -eq 0 ] || { usage push; exit 1; }
+	[ "$#" -eq 0 ] || usage push
 
 	if git rev-parse refs/tags/latest-signature >/dev/null 2>&1; then
 		git push origin refs/notes/signatures +refs/tags/latest-signature
