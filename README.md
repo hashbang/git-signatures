@@ -1,5 +1,9 @@
 # Git Signatures #
 
+**Note:** This repository has been archived and superceded by `sig`, which is
+eventually being superceded by a new project. You can read more details
+[here](https://gist.github.com/lrvick/d4b87c600cc074dfcd00a01ee6275420).
+
 This repo includes extensions and workflow examples for being able to attach
 an arbitrary number of GPG signatures to a given commit or tag.
 
